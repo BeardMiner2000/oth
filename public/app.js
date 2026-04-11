@@ -209,78 +209,174 @@ function buildVerdictInput(daySlice, buoyData, sourceHint = 'surfline') {
 }
 
 // ─── Verdict Algorithm ────────────────────────────────────────────────────────
+//
+// Tuned entirely for JL's style:
+//   • Longboard / mellow vibe — slow, clean, glassy waves are the dream
+//   • Sweet spot: 2-4ft, long period, glassy or light offshore
+//   • 4-5ft starts feeling big; 5ft+ is genuinely scary → low score
+//   • Flat/no waves → not a failure, just SWIM DAY (positive spin)
+//   • Bolinas-specific tide: mid-to-low preferred for the Patch
+//   • Channel: avoid strong incoming tide (fast low→high change)
 
-/**
- * Main scoring function. Returns 0-100.
- * Tuned for Bolinas longboarding:
- *   - Sweet spot: 2-6ft, 12-16s period, light offshore wind
- */
 function computeScore(data) {
-  if (!data) return 0;
+  if (!data) return { score: 0, reasons: [], flat: false, scary: false };
 
-  let score  = 50;
+  let score = 40; // start neutral
   const reasons = [];
+  let flat  = false;
+  let scary = false;
 
-  // ── Wave height ──
+  // ── Wave height (the main dial) ──────────────────────────────────────────
   const waveMin = data.wave ? (data.wave.min || 0) : 0;
   const waveMax = data.wave ? (data.wave.max || 0) : 0;
   const waveMid = (waveMin + waveMax) / 2;
+  const waveStr = waveMin === waveMax ? `${waveMin}FT` : `${waveMin}-${waveMax}FT`;
 
-  if (waveMid >= 2 && waveMid <= 4)       { score += 20; reasons.push({ text: `${waveMin}-${waveMax}FT IDEAL`,        cls: 'reason-good'    }); }
-  else if (waveMid > 4 && waveMid <= 6)   { score += 12; reasons.push({ text: `${waveMin}-${waveMax}FT OVERHEAD`,     cls: 'reason-good'    }); }
-  else if (waveMid > 6 && waveMid <= 10)  { score += 0;  reasons.push({ text: `${waveMin}-${waveMax}FT BIG`,          cls: 'reason-neutral' }); }
-  else if (waveMid > 10)                  { score -= 15; reasons.push({ text: `${waveMin}-${waveMax}FT TOO BIG`,      cls: 'reason-bad'     }); }
-  else if (waveMid >= 1 && waveMid < 2)   { score -= 10; reasons.push({ text: `${waveMin}-${waveMax}FT SMALL`,        cls: 'reason-neutral' }); }
-  else if (waveMid < 1)                   { score -= 30; reasons.push({ text: `${waveMin}-${waveMax}FT FLAT`,         cls: 'reason-bad'     }); }
+  if (waveMid < 0.5) {
+    // Flat — totally different activity, not a failure
+    flat = true;
+    score = 20;
+    reasons.push({ text: 'BASICALLY FLAT', cls: 'reason-swim' });
+  } else if (waveMid < 1.5) {
+    score += 0;
+    reasons.push({ text: `${waveStr} SMALL`, cls: 'reason-neutral' });
+  } else if (waveMid >= 1.5 && waveMid < 2.5) {
+    score += 20;
+    reasons.push({ text: `${waveStr} MELLOW ✓`, cls: 'reason-good' });
+  } else if (waveMid >= 2.5 && waveMid <= 4.0) {
+    // JL's ideal zone
+    score += 35;
+    reasons.push({ text: `${waveStr} PERFECT SIZE`, cls: 'reason-good' });
+  } else if (waveMid > 4.0 && waveMid <= 5.0) {
+    // Getting chunky — JL starts feeling it
+    score -= 10;
+    reasons.push({ text: `${waveStr} GETTING CHUNKY`, cls: 'reason-warn' });
+  } else if (waveMid > 5.0 && waveMid <= 7.0) {
+    // Scary territory
+    scary = true;
+    score -= 25;
+    reasons.push({ text: `${waveStr} TOO MUCH POWER`, cls: 'reason-bad' });
+  } else {
+    // Way too big
+    scary = true;
+    score -= 40;
+    reasons.push({ text: `${waveStr} TERRIFYING`, cls: 'reason-bad' });
+  }
 
-  // ── Period ──
-  const period = data.wave ? (data.wave.period || 0) : 0;
-  if (period >= 15)                        { score += 20; reasons.push({ text: `${period}S LONG PERIOD`,              cls: 'reason-good'    }); }
-  else if (period >= 12)                   { score += 12; reasons.push({ text: `${period}S GOOD PERIOD`,              cls: 'reason-good'    }); }
-  else if (period >= 10)                   { score += 6;  reasons.push({ text: `${period}S OK PERIOD`,                cls: 'reason-neutral' }); }
-  else if (period >= 8)                    { score -= 5;  reasons.push({ text: `${period}S SHORT PERIOD`,             cls: 'reason-neutral' }); }
-  else if (period > 0)                     { score -= 15; reasons.push({ text: `${period}S CHOPPY`,                   cls: 'reason-bad'     }); }
+  if (flat) return { score: Math.max(0, Math.min(100, Math.round(score))), reasons, flat, scary };
 
-  // ── Wind ──
+  // ── Glassiness / Wind (huge factor for JL — clean > size) ───────────────
   const windSpeed = data.wind ? (data.wind.speed || 0) : 0;
   const windDir   = data.wind ? (data.wind.direction || '') : '';
   const windType  = data.wind ? (data.wind.type || '') : '';
 
-  const isOffshore = ['N','NE','E','NNE','ENE'].includes(windDir);
-  const isOnshore  = ['S','SW','W','SSW','WSW','SSE','SE'].includes(windDir);
+  const isOffshore = windType === 'Offshore' || ['N','NNE','NE','ENE'].includes(windDir);
+  const isOnshore  = windType === 'Onshore'  || ['S','SSW','SW','W','WSW','NW','NNW'].includes(windDir);
 
-  if (windType === 'Offshore' || (isOffshore && windSpeed < 15)) {
-    if (windSpeed < 5)        { score += 18; reasons.push({ text: 'LIGHT OFFSHORE',                               cls: 'reason-good' }); }
-    else if (windSpeed < 10)  { score += 12; reasons.push({ text: `${windDir} ${windSpeed}KT OFFSHORE`,           cls: 'reason-good' }); }
-    else                      { score += 5;  reasons.push({ text: `${windDir} ${windSpeed}KT MOD OFFSHORE`,       cls: 'reason-good' }); }
-  } else if (windType === 'Onshore' || isOnshore) {
-    if (windSpeed < 5)        { score += 0;  reasons.push({ text: 'LIGHT ONSHORE',                                cls: 'reason-neutral' }); }
-    else if (windSpeed < 12)  { score -= 10; reasons.push({ text: `${windDir} ${windSpeed}KT ONSHORE`,            cls: 'reason-bad' }); }
-    else                      { score -= 20; reasons.push({ text: `${windDir} ${windSpeed}KT STRONG ONSHORE`,     cls: 'reason-bad' }); }
-  } else if (windSpeed < 5)  { score += 8;  reasons.push({ text: 'CALM WINDS',                                    cls: 'reason-good' }); }
-  else if (windSpeed > 20)   { score -= 18; reasons.push({ text: `${windSpeed}KT STRONG WIND`,                    cls: 'reason-bad' }); }
-
-  // ── Swell direction (NW/WNW best for Bolinas) ──
-  const swellDir = data.wave ? (data.wave.swellDir || '') : '';
-  if (['NW','WNW','NNW','W'].includes(swellDir)) {
-    score += 8; reasons.push({ text: `${swellDir} SWELL IDEAL`,                                                   cls: 'reason-good' });
-  } else if (['SW','WSW'].includes(swellDir)) {
-    score += 3; reasons.push({ text: `${swellDir} SWELL OK`,                                                      cls: 'reason-neutral' });
-  } else if (swellDir && !['N','NE'].includes(swellDir)) {
-    score -= 5; reasons.push({ text: `${swellDir} SWELL MARGINAL`,                                                cls: 'reason-neutral' });
+  if (windSpeed < 3) {
+    // Glassy — JL's dream
+    score += 25;
+    reasons.push({ text: 'GLASSY 🏄', cls: 'reason-good' });
+  } else if (isOffshore && windSpeed < 8) {
+    score += 20;
+    reasons.push({ text: `${windDir} ${Math.round(windSpeed)}KT OFFSHORE`, cls: 'reason-good' });
+  } else if (isOffshore && windSpeed < 15) {
+    score += 10;
+    reasons.push({ text: `${windDir} ${Math.round(windSpeed)}KT MOD OFFSHORE`, cls: 'reason-good' });
+  } else if (!isOnshore && windSpeed < 8) {
+    score += 8;
+    reasons.push({ text: 'LIGHT WINDS', cls: 'reason-good' });
+  } else if (isOnshore && windSpeed < 6) {
+    score += 0;
+    reasons.push({ text: 'LIGHT ONSHORE', cls: 'reason-neutral' });
+  } else if (isOnshore && windSpeed < 12) {
+    score -= 12;
+    reasons.push({ text: `${windDir} ${Math.round(windSpeed)}KT ONSHORE`, cls: 'reason-bad' });
+  } else if (isOnshore || windSpeed >= 12) {
+    score -= 20;
+    reasons.push({ text: `${Math.round(windSpeed)}KT BLOWN OUT`, cls: 'reason-bad' });
   }
 
-  return { score: Math.max(0, Math.min(100, Math.round(score))), reasons };
+  // ── Period (long period = slow, rolling waves = JL's ideal) ─────────────
+  const period = data.wave ? (data.wave.period || 0) : 0;
+  if (period >= 14) {
+    score += 15;
+    reasons.push({ text: `${period}S SLOW ROLLERS`, cls: 'reason-good' });
+  } else if (period >= 11) {
+    score += 8;
+    reasons.push({ text: `${period}S GOOD PERIOD`, cls: 'reason-good' });
+  } else if (period >= 8) {
+    reasons.push({ text: `${period}S OK PERIOD`, cls: 'reason-neutral' });
+  } else if (period > 0) {
+    score -= 8;
+    reasons.push({ text: `${period}S CHOPPY/FAST`, cls: 'reason-bad' });
+  }
+
+  // ── Swell direction (NW/WNW wraps into Bolinas beautifully) ─────────────
+  const swellDir = data.wave ? (data.wave.swellDir || '') : '';
+  if (['NW','WNW','W'].includes(swellDir)) {
+    score += 8;
+    reasons.push({ text: `${swellDir} SWELL ✓`, cls: 'reason-good' });
+  } else if (['NNW','SW','WSW'].includes(swellDir)) {
+    score += 3;
+    reasons.push({ text: `${swellDir} SWELL OK`, cls: 'reason-neutral' });
+  } else if (swellDir && ['S','SE','E','NE'].includes(swellDir)) {
+    score -= 5;
+    reasons.push({ text: `${swellDir} SWELL WEAK`, cls: 'reason-neutral' });
+  }
+
+  // ── Tide (mid-to-low = best for the Patch; strong incoming = messy Channel) ──
+  const tideHeight = data.tide ? data.tide.height : null;
+  const tideType   = data.tide ? (data.tide.type || '') : '';
+
+  if (tideHeight !== null) {
+    if (tideHeight >= 0 && tideHeight <= 2.5) {
+      score += 10;
+      reasons.push({ text: `${tideHeight.toFixed(1)}FT LOW-MID TIDE`, cls: 'reason-good' });
+    } else if (tideHeight > 2.5 && tideHeight <= 4.0) {
+      reasons.push({ text: `${tideHeight.toFixed(1)}FT MID TIDE`, cls: 'reason-neutral' });
+    } else if (tideHeight > 4.0) {
+      score -= 8;
+      reasons.push({ text: `${tideHeight.toFixed(1)}FT HIGH TIDE`, cls: 'reason-bad' });
+    }
+  }
+
+  return { score: Math.max(0, Math.min(100, Math.round(score))), reasons, flat, scary };
 }
 
 function calculateVerdict(data) {
-  const { score, reasons } = computeScore(data);
+  const { score, reasons, flat, scary } = computeScore(data);
 
   let verdict, cls;
-  if      (score >= 82) { verdict = '[ EPIC — HANG TEN ]';  cls = 'epic';     }
-  else if (score >= 62) { verdict = '[ WOULD GO ]';          cls = 'good';     }
-  else if (score >= 42) { verdict = '[ MAYBE... ]';          cls = 'marginal'; }
-  else                  { verdict = '[ STAY HOME ]';         cls = 'poor';     }
+
+  if (flat) {
+    verdict = '[ SWIM DAY! ]';
+    cls     = 'swim';
+  } else if (scary) {
+    // Override score label when wave height alone says scary
+    if (score < 25) {
+      verdict = '[ KINDA SCARY ]';
+      cls     = 'scary';
+    } else {
+      verdict = '[ TOO CHUNKY ]';
+      cls     = 'chunky';
+    }
+  } else if (score >= 80) {
+    verdict = '[ HUGE STOKE! ]';
+    cls     = 'epic';
+  } else if (score >= 62) {
+    verdict = '[ JL WOULD GO ]';
+    cls     = 'good';
+  } else if (score >= 44) {
+    verdict = '[ MAYBE... ]';
+    cls     = 'marginal';
+  } else if (score >= 28) {
+    verdict = '[ TOO CHUNKY ]';
+    cls     = 'chunky';
+  } else {
+    verdict = '[ KINDA SCARY ]';
+    cls     = 'scary';
+  }
 
   return { verdict, score, cls, reasons };
 }
@@ -301,7 +397,14 @@ function renderVerdictPanel(verdict) {
   textEl.textContent = verdict.verdict;
 
   // Label
-  const labels = { epic: 'SURF REPORT // EPIC SWELL INCOMING', good: 'SURF REPORT // CONDITIONS FAVORABLE', marginal: 'SURF REPORT // MARGINAL CONDITIONS', poor: 'SURF REPORT // CONDITIONS UNFAVORABLE' };
+  const labels = {
+    epic:     'SURF REPORT // SLOW CLEAN PERFECTION',
+    good:     'SURF REPORT // CONDITIONS FAVORABLE',
+    marginal: 'SURF REPORT // MARGINAL CONDITIONS',
+    chunky:   'SURF REPORT // GETTING A BIT MUCH',
+    scary:    'SURF REPORT // TOO MUCH POWER IN THE WATER',
+    swim:     'SURF REPORT // GREAT DAY FOR A SWIM + EXERCISE'
+  };
   if (labelEl) labelEl.textContent = labels[verdict.cls] || 'SURF REPORT';
 
   // Stoke meter
@@ -377,11 +480,13 @@ function renderForecastTable(intervals, tides) {
     const stars = computeStarRating(waveMin, waveMax, period, windSpeed,
       entry.wind ? entry.wind.directionType : '');
 
-    // Colour coding for wave height
+    // Colour coding tuned for JL: 2-4ft = sweet spot
+    const waveMidRow = (waveMin + waveMax) / 2;
     let waveCls = 'tbl-data';
-    if (waveMin >= 3 && waveMax <= 8) waveCls = 'tbl-good';
-    else if (waveMax > 8)             waveCls = 'tbl-amber';
-    else if (waveMax < 1.5)          waveCls = 'tbl-poor';
+    if (waveMax < 0.5)                      waveCls = 'tbl-swim';   // flat = swim
+    else if (waveMidRow >= 1.5 && waveMidRow <= 4.0) waveCls = 'tbl-good';   // ideal
+    else if (waveMidRow > 4.0 && waveMidRow <= 5.5)  waveCls = 'tbl-amber';  // chunky
+    else if (waveMidRow > 5.5)                        waveCls = 'tbl-poor';   // scary
 
     // Day separator
     if (dayStr !== lastDay) {
@@ -449,15 +554,22 @@ function renderForecastTable(intervals, tides) {
 }
 
 function computeStarRating(waveMin, waveMax, period, windSpeed, windType) {
-  let stars = 2.5;
+  let stars = 2;
   const mid = (waveMin + waveMax) / 2;
-  if (mid >= 2 && mid <= 5) stars += 1;
-  else if (mid < 1)          stars -= 1.5;
-  else if (mid > 8)          stars -= 0.5;
-  if (period >= 14)          stars += 0.5;
-  else if (period < 8)       stars -= 0.5;
-  if (windType === 'Offshore') stars += 0.5;
-  else if (windType === 'Onshore' && windSpeed > 10) stars -= 1;
+  // JL sweet spot: 2-4ft slow and clean
+  if (mid >= 2 && mid <= 4)       stars += 2;
+  else if (mid >= 1 && mid < 2)   stars += 1;
+  else if (mid > 4 && mid <= 5)   stars += 0.5;
+  else if (mid > 5)               stars -= 1.5;  // too big
+  else if (mid < 0.5)             stars -= 1;    // flat
+  // Long slow period = better for longboarding
+  if (period >= 14)                stars += 1;
+  else if (period >= 11)           stars += 0.5;
+  else if (period < 7)             stars -= 0.5;
+  // Glassy/offshore = massive bonus
+  if (!windSpeed || windSpeed < 3) stars += 1;   // glassy
+  else if (windType === 'Offshore' && windSpeed < 10) stars += 0.5;
+  else if (windType === 'Onshore' && windSpeed > 8) stars -= 1;
   return Math.max(0, Math.min(5, Math.round(stars * 2) / 2));
 }
 

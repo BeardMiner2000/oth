@@ -1,25 +1,34 @@
 /* ═══════════════════════════════════════════════════════════════════════════════
-   JL WOULD GO — Retro Terminal / 80s Phosphor CRT Stylesheet
+   JL WOULD GO — 90s Surf / Neon Terminal Stylesheet
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* ─── Custom Properties ─────────────────────────────────────────────────────── */
 :root {
-  --bg:        #000500;
-  --primary:   #00ff41;
-  --dim:       #003b00;
-  --mid:       #00aa22;
-  --bright:    #80ff80;
-  --amber:     #ffb000;
-  --amber-dim: #7a5500;
-  --red:       #ff3333;
-  --wave:      #00cc88;
-  --wave-dim:  #004433;
-  --text:      #00dd35;
-  --border:    #00bb30;
-  --glow:      0 0 6px #00ff41, 0 0 12px #00ff41, 0 0 24px rgba(0,255,65,0.4);
-  --glow-sm:   0 0 4px #00ff41, 0 0 8px rgba(0,255,65,0.5);
-  --glow-amber:0 0 6px #ffb000, 0 0 12px rgba(255,176,0,0.5);
-  --glow-red:  0 0 6px #ff3333, 0 0 12px rgba(255,51,51,0.5);
+  --bg:         #08060f;            /* deep purple-black                     */
+  --primary:    #ff2d95;            /* hot pink — main UI chrome             */
+  --secondary:  #00e5cc;            /* electric teal — secondary accents     */
+  --dim:        #4a0a30;            /* dim pink for borders/bg               */
+  --mid:        #cc1a78;            /* mid pink for labels                   */
+  --bright:     #ff80c8;            /* light pink highlight                  */
+  --neon-yellow:#f5ff00;            /* neon yellow — star ratings / tide     */
+  --neon-green: #00ff8c;            /* neon lime — good conditions           */
+  --orange:     #ff7c00;            /* neon orange — marginal                */
+  --red:        #ff2d55;            /* hot red — scary/poor                  */
+  --swim:       #00e5ff;            /* electric cyan — swim day              */
+  --wave:       #00b4d8;            /* ocean blue for wave chars             */
+  --wave-crest: #90e0ef;            /* foam white-blue                       */
+  --wave-dim:   #023e5c;            /* dark wave background                  */
+  --text:       #ffb3d9;            /* soft pink body text                   */
+  --border:     #ff2d95;            /* hot pink border                       */
+  --glow:       0 0 6px #ff2d95, 0 0 14px #ff2d95, 0 0 28px rgba(255,45,149,0.45);
+  --glow-sm:    0 0 4px #ff2d95, 0 0 10px rgba(255,45,149,0.5);
+  --glow-teal:  0 0 6px #00e5cc, 0 0 14px rgba(0,229,204,0.45);
+  --glow-teal-sm:0 0 4px #00e5cc, 0 0 8px rgba(0,229,204,0.4);
+  --glow-yellow:0 0 6px #f5ff00, 0 0 14px rgba(245,255,0,0.5);
+  --glow-green: 0 0 6px #00ff8c, 0 0 14px rgba(0,255,140,0.45);
+  --glow-orange:0 0 6px #ff7c00, 0 0 12px rgba(255,124,0,0.45);
+  --glow-red:   0 0 6px #ff2d55, 0 0 12px rgba(255,45,85,0.45);
+  --glow-cyan:  0 0 6px #00e5ff, 0 0 14px rgba(0,229,255,0.5);
 }
 
 /* ─── Reset ──────────────────────────────────────────────────────────────────── */
@@ -74,7 +83,7 @@ a:hover { text-shadow: var(--glow-sm); }
   margin: 0 auto;
   padding: 1rem 1.5rem 2rem;
   border: 1px solid var(--border);
-  box-shadow: var(--glow), inset 0 0 80px rgba(0, 255, 65, 0.03);
+  box-shadow: var(--glow), inset 0 0 80px rgba(255, 45, 149, 0.03);
   min-height: 100vh;
   position: relative;
 }
@@ -137,9 +146,9 @@ header {
   border: 1px solid var(--wave-dim);
   border-radius: 2px;
   margin: 0.75rem 0;
-  background: linear-gradient(180deg, #000a05 0%, #001a0a 60%, #002215 100%);
+  background: linear-gradient(180deg, #04080f 0%, #021529 60%, #02233d 100%);
   position: relative;
-  box-shadow: inset 0 0 30px rgba(0, 204, 136, 0.07);
+  box-shadow: inset 0 0 30px rgba(0, 180, 216, 0.07);
 }
 
 .ocean {
@@ -171,16 +180,16 @@ header {
 
 /* Background waves */
 .wave-bg-1 {
-  color: var(--wave-dim);
-  opacity: 0.5;
+  color: #023e5c;
+  opacity: 0.6;
 }
 .wave-bg-1 .wave-content {
   animation: waveScroll 9s linear infinite;
 }
 
 .wave-bg-2 {
-  color: #003322;
-  opacity: 0.4;
+  color: #01263b;
+  opacity: 0.5;
 }
 .wave-bg-2 .wave-content {
   animation: waveScroll 12s linear infinite reverse;
@@ -189,19 +198,19 @@ header {
 /* Main crest + surfer row */
 .wave-main {
   position: relative;
-  color: var(--wave);
+  color: var(--wave-crest);
   font-size: 0.9rem;
   z-index: 10;
 }
 .wave-main .wave-crest {
   animation: waveScroll 5s linear infinite;
-  color: var(--wave);
-  text-shadow: 0 0 4px var(--wave), 0 0 8px rgba(0,204,136,0.4);
+  color: var(--wave-crest);
+  text-shadow: 0 0 4px var(--swim), 0 0 10px rgba(0, 180, 216, 0.5);
 }
 
 /* Wave face row (directly under crest) */
 .wave-face {
-  color: #009966;
+  color: var(--wave);
 }
 .wave-face .wave-content {
   animation: waveScroll 5s linear infinite;
@@ -209,7 +218,7 @@ header {
 
 /* Middle water */
 .wave-mid {
-  color: #006644;
+  color: #0077a8;
   font-size: 0.8rem;
 }
 .wave-mid .wave-content {
@@ -218,7 +227,7 @@ header {
 
 /* Deep water rows */
 .wave-deep-1 {
-  color: #003322;
+  color: #00334d;
   font-size: 0.75rem;
   opacity: 0.7;
 }
@@ -227,7 +236,7 @@ header {
 }
 
 .wave-deep-2 {
-  color: #001a11;
+  color: #011d2e;
   font-size: 0.7rem;
   opacity: 0.4;
 }
@@ -258,8 +267,8 @@ header {
   font-family: 'Courier New', monospace;
   font-size: 0.8rem;
   line-height: 1.1;
-  color: var(--bright);
-  text-shadow: 0 0 6px var(--primary), 0 0 12px rgba(0,255,65,0.5);
+  color: var(--neon-yellow);
+  text-shadow: 0 0 6px var(--neon-yellow), 0 0 14px rgba(245,255,0,0.6);
   margin: 0;
   white-space: pre;
 }
@@ -285,7 +294,7 @@ header {
   margin: 0.75rem 0;
   padding: 0.75rem;
   border: 1px solid var(--dim);
-  background: rgba(0, 10, 0, 0.5);
+  background: rgba(8, 6, 15, 0.7);
 }
 
 .ctrl-label {
@@ -391,8 +400,8 @@ header {
   border: 2px solid var(--dim);
   padding: 1rem 1.5rem;
   text-align: center;
-  background: rgba(0, 8, 0, 0.6);
-  transition: border-color 0.4s ease, box-shadow 0.4s ease;
+  background: rgba(8, 6, 15, 0.75);
+  transition: border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease;
   position: relative;
   overflow: hidden;
 }
@@ -416,29 +425,91 @@ header {
 #verdict-text {
   font-family: 'Press Start 2P', monospace;
   font-size: clamp(1rem, 4vw, 2.2rem);
-  color: var(--primary);
-  text-shadow: var(--glow);
   letter-spacing: 0.05em;
   line-height: 1.3;
   padding: 0.4rem 0;
   transition: color 0.4s ease, text-shadow 0.4s ease;
 }
 
-/* Verdict states */
-#verdict-box.epic    { border-color: var(--bright); box-shadow: var(--glow), inset 0 0 40px rgba(0,255,65,0.1); }
-#verdict-box.good    { border-color: var(--primary); box-shadow: var(--glow-sm); }
-#verdict-box.marginal{ border-color: var(--amber);  box-shadow: var(--glow-amber); }
-#verdict-box.poor    { border-color: var(--red);    box-shadow: var(--glow-red); }
-#verdict-box.loading { border-color: var(--dim);    box-shadow: none; }
+/* ── Verdict states: each has a distinct 90s neon identity ── */
 
-#verdict-box.epic    #verdict-text { color: var(--bright); text-shadow: var(--glow); animation: verdictPulse 1.5s ease-in-out infinite; }
-#verdict-box.good    #verdict-text { color: var(--primary); text-shadow: var(--glow); animation: verdictPulse 2.5s ease-in-out infinite; }
-#verdict-box.marginal #verdict-text{ color: var(--amber);   text-shadow: var(--glow-amber); }
-#verdict-box.poor    #verdict-text { color: var(--red);     text-shadow: var(--glow-red); }
+/* HUGE STOKE — neon lime, energetic pulse */
+#verdict-box.epic {
+  border-color: var(--neon-green);
+  box-shadow: var(--glow-green), inset 0 0 40px rgba(0,255,140,0.07);
+  background: rgba(0, 20, 10, 0.75);
+}
+#verdict-box.epic #verdict-text {
+  color: var(--neon-green);
+  text-shadow: var(--glow-green);
+  animation: verdictPulse 1.4s ease-in-out infinite;
+}
+#verdict-box.epic #stoke-bar { color: var(--neon-green); text-shadow: var(--glow-green); }
+
+/* WOULD GO — hot pink, steady glow */
+#verdict-box.good {
+  border-color: var(--primary);
+  box-shadow: var(--glow), inset 0 0 30px rgba(255,45,149,0.06);
+}
+#verdict-box.good #verdict-text {
+  color: var(--primary);
+  text-shadow: var(--glow);
+  animation: verdictPulse 2.5s ease-in-out infinite;
+}
+#verdict-box.good #stoke-bar { color: var(--primary); text-shadow: var(--glow-sm); }
+
+/* MAYBE — electric teal */
+#verdict-box.marginal {
+  border-color: var(--secondary);
+  box-shadow: var(--glow-teal);
+}
+#verdict-box.marginal #verdict-text {
+  color: var(--secondary);
+  text-shadow: var(--glow-teal);
+}
+#verdict-box.marginal #stoke-bar { color: var(--secondary); text-shadow: var(--glow-teal-sm); }
+
+/* TOO CHUNKY — neon orange, warning */
+#verdict-box.chunky {
+  border-color: var(--orange);
+  box-shadow: var(--glow-orange);
+}
+#verdict-box.chunky #verdict-text {
+  color: var(--orange);
+  text-shadow: var(--glow-orange);
+}
+#verdict-box.chunky #stoke-bar { color: var(--orange); }
+
+/* KINDA SCARY — hot red */
+#verdict-box.scary {
+  border-color: var(--red);
+  box-shadow: var(--glow-red);
+}
+#verdict-box.scary #verdict-text {
+  color: var(--red);
+  text-shadow: var(--glow-red);
+}
+#verdict-box.scary #stoke-bar { color: var(--red); }
+
+/* SWIM DAY — electric cyan, positive/chill */
+#verdict-box.swim {
+  border-color: var(--swim);
+  box-shadow: var(--glow-cyan), inset 0 0 30px rgba(0,229,255,0.04);
+}
+#verdict-box.swim #verdict-text {
+  color: var(--swim);
+  text-shadow: var(--glow-cyan);
+  animation: verdictPulse 3s ease-in-out infinite;
+}
+#verdict-box.swim #stoke-bar { color: var(--swim); text-shadow: var(--glow-cyan); }
+
+/* Loading */
+#verdict-box.verdict-loading { border-color: var(--dim); box-shadow: none; }
+#verdict-box.verdict-loading #verdict-text { color: var(--mid); text-shadow: none; }
 
 @keyframes verdictPulse {
-  0%, 100% { opacity: 1; text-shadow: var(--glow); }
-  50%       { opacity: 0.85; text-shadow: 0 0 20px #00ff41, 0 0 40px rgba(0,255,65,0.6), 0 0 60px rgba(0,255,65,0.3); }
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.75; }
 }
 
 /* Stoke meter */
@@ -456,9 +527,9 @@ header {
 
 #stoke-bar {
   font-family: 'Courier New', monospace;
-  color: var(--primary);
-  text-shadow: var(--glow-sm);
+  /* color set per verdict state above */
   letter-spacing: 0;
+  transition: color 0.4s ease;
 }
 
 /* Verdict reasons */
@@ -475,9 +546,11 @@ header {
   margin: 0 0.4rem;
 }
 
-#verdict-reasons .reason-good    { color: var(--primary); }
+#verdict-reasons .reason-good    { color: var(--neon-green); }
 #verdict-reasons .reason-bad     { color: var(--red); }
-#verdict-reasons .reason-neutral { color: var(--amber); }
+#verdict-reasons .reason-neutral { color: var(--secondary); }
+#verdict-reasons .reason-warn    { color: var(--orange); }
+#verdict-reasons .reason-swim    { color: var(--swim); }
 
 /* ─── Section Headers ────────────────────────────────────────────────────────── */
 .section-header {
@@ -495,7 +568,7 @@ header {
   margin: 0.75rem 0;
   padding: 0.75rem;
   border: 1px solid var(--dim);
-  background: rgba(0, 8, 0, 0.4);
+  background: rgba(8, 6, 15, 0.5);
   overflow-x: auto;
 }
 
@@ -517,14 +590,15 @@ header {
 }
 
 .forecast-table .tbl-border  { color: var(--dim); }
-.forecast-table .tbl-header  { color: var(--mid); }
+.forecast-table .tbl-header  { color: var(--secondary); }
 .forecast-table .tbl-data    { color: var(--text); }
-.forecast-table .tbl-good    { color: var(--primary); text-shadow: var(--glow-sm); }
-.forecast-table .tbl-amber   { color: var(--amber); }
+.forecast-table .tbl-good    { color: var(--neon-green); text-shadow: 0 0 4px rgba(0,255,140,0.5); }
+.forecast-table .tbl-amber   { color: var(--orange); }
 .forecast-table .tbl-poor    { color: var(--red); }
-.forecast-table .tbl-current { background: rgba(0,255,65,0.05); }
+.forecast-table .tbl-swim    { color: var(--swim); }
+.forecast-table .tbl-current { background: rgba(255,45,149,0.06); }
 
-.forecast-table .star-filled { color: var(--amber); }
+.forecast-table .star-filled { color: var(--neon-yellow); text-shadow: 0 0 4px rgba(245,255,0,0.5); }
 .forecast-table .star-empty  { color: var(--dim); }
 
 /* ─── Buoy Panel ─────────────────────────────────────────────────────────────── */
@@ -532,7 +606,7 @@ header {
   margin: 0.75rem 0;
   padding: 0.75rem;
   border: 1px solid var(--dim);
-  background: rgba(0, 8, 0, 0.4);
+  background: rgba(8, 6, 15, 0.5);
 }
 
 #buoy-data-wrap {
@@ -551,9 +625,9 @@ header {
 }
 
 .buoy-card .buoy-border  { color: var(--wave-dim); }
-.buoy-card .buoy-title   { color: var(--wave); text-shadow: 0 0 4px var(--wave); }
+.buoy-card .buoy-title   { color: var(--swim); text-shadow: 0 0 4px rgba(0,229,255,0.5); }
 .buoy-card .buoy-label   { color: var(--mid); }
-.buoy-card .buoy-value   { color: var(--bright); }
+.buoy-card .buoy-value   { color: var(--secondary); }
 .buoy-card .buoy-missing { color: var(--dim); }
 
 /* ─── Terminal Messages ──────────────────────────────────────────────────────── */
@@ -568,14 +642,14 @@ header {
 .error-box {
   font-family: 'Courier New', monospace;
   font-size: 0.85rem;
-  color: var(--amber);
-  border: 1px solid var(--amber-dim);
+  color: var(--orange);
+  border: 1px solid rgba(255,124,0,0.3);
   padding: 0.5rem 0.75rem;
   margin: 0.4rem 0;
 }
 
-.error-box .err-border { color: var(--amber-dim); }
-.error-box .err-text   { color: var(--amber); }
+.error-box .err-border { color: rgba(255,124,0,0.4); }
+.error-box .err-text   { color: var(--orange); }
 
 /* ─── Loading Bar ────────────────────────────────────────────────────────────── */
 #loading-bar-wrap {
@@ -589,7 +663,7 @@ header {
   flex: 1;
   height: 4px;
   background: var(--dim);
-  border: 1px solid rgba(0,255,65,0.1);
+  border: 1px solid rgba(255,45,149,0.15);
   overflow: hidden;
 }
 
@@ -729,7 +803,7 @@ footer {
     font-family: 'Press Start 2P', monospace;
     font-size: 0.8rem;
     color: var(--primary);
-    text-shadow: var(--glow-sm);
+    text-shadow: var(--glow);
     text-align: center;
     padding: 0.5rem 0;
   }
