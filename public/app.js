@@ -1,0 +1,716 @@
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   JL WOULD GO — Frontend Application
+   ═══════════════════════════════════════════════════════════════════════════════ */
+
+// ─── State ────────────────────────────────────────────────────────────────────
+const state = {
+  currentSpot:  'bolinas',
+  currentDay:   0,         // 0 = today, 1 = tomorrow, ...
+  forecastData: null,
+  buoyData:     null,
+  loading:      false,
+  lastUpdated:  null,
+  spots:        {}
+};
+
+// ─── Spot Definitions (mirrors server) ───────────────────────────────────────
+const SPOTS = {
+  bolinas:      { id: '5842041f4e65fad6a77089c2', name: 'Bolinas',         region: 'Marin',         lat: 37.9051, lon: -122.6815 },
+  stinson:      { id: '5842041f4e65fad6a77089c1', name: 'Stinson Beach',   region: 'Marin',         lat: 37.8978, lon: -122.6415 },
+  oceanBeachSF: { id: '638e32a4f052ba4ed06d0e3e', name: 'Ocean Beach SF',  region: 'San Francisco', lat: 37.7594, lon: -122.5107 },
+  lindaMar:     { id: '5842041f4e65fad6a7708976', name: 'Linda Mar',       region: 'Pacifica',      lat: 37.5856, lon: -122.4995 },
+  mavericks:    { id: '5842041f4e65fad6a7708801', name: "Maverick's",      region: 'Half Moon Bay', lat: 37.4917, lon: -122.5042 },
+  dillonBeach:  { id: '584204204e65fad6a770938c', name: 'Dillon Beach',    region: 'Marin',         lat: 38.2394, lon: -122.9618 },
+  salmonCreek:  { id: '5842041f4e65fad6a77089c8', name: 'Salmon Creek',    region: 'Sonoma',        lat: 38.3394, lon: -123.0582 }
+};
+
+// ─── Wind direction helpers ───────────────────────────────────────────────────
+const DIR_NAMES = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
+
+function degToCompass(deg) {
+  if (deg === null || deg === undefined || isNaN(deg)) return '---';
+  return DIR_NAMES[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', init);
+
+async function init() {
+  renderSpotSelector();
+  renderDateNav();
+  await loadForecast(state.currentSpot);
+  startAutoRefresh();
+  startSurferAnimation();
+}
+
+// ─── Auto-refresh ─────────────────────────────────────────────────────────────
+function startAutoRefresh() {
+  // Refresh every 30 minutes
+  setInterval(() => {
+    loadForecast(state.currentSpot);
+  }, 30 * 60 * 1000);
+}
+
+// ─── API Calls ────────────────────────────────────────────────────────────────
+async function loadForecast(spotId) {
+  setLoading(true);
+  try {
+    const [forecast, ...buoys] = await Promise.all([
+      fetch(`/api/forecast/${spotId}`).then(r => {
+        if (!r.ok) throw new Error(`Forecast API returned ${r.status}`);
+        return r.json();
+      }),
+      fetch(`/api/buoy/46026`).then(r => r.json()).catch(e => ({ error: e.message, latest: null })),
+      fetch(`/api/buoy/46013`).then(r => r.json()).catch(e => ({ error: e.message, latest: null })),
+      fetch(`/api/buoy/46214`).then(r => r.json()).catch(e => ({ error: e.message, latest: null }))
+    ]);
+
+    state.forecastData = forecast;
+    state.buoyData     = buoys;
+    state.lastUpdated  = new Date();
+
+    render();
+  } catch (e) {
+    renderError(e.message);
+  } finally {
+    setLoading(false);
+  }
+}
+
+// Global function for the footer refresh link
+window.refreshData = function() {
+  loadForecast(state.currentSpot);
+};
+
+// ─── Render Orchestrator ──────────────────────────────────────────────────────
+function render() {
+  if (!state.forecastData) return;
+
+  const spotName = SPOTS[state.currentSpot]
+    ? SPOTS[state.currentSpot].name
+    : state.currentSpot;
+
+  // Update spot name in forecast header
+  const nameEl = document.getElementById('forecast-spot-name');
+  if (nameEl) nameEl.textContent = spotName.toUpperCase();
+
+  // Get the currently displayed day's data slice
+  const surflineData = state.forecastData.surfline || [];
+  const dayData = getDaySlice(surflineData, state.currentDay);
+
+  // Fall back to Open-Meteo if no Surfline data for this day
+  const openMeteoData = state.forecastData.openMeteo || [];
+  const openMeteoDayData = getDaySlice(openMeteoData, state.currentDay);
+
+  // Verdict — prefer Surfline, fall back to Open-Meteo then buoy
+  const verdictInput = buildVerdictInput(
+    dayData.length ? dayData : openMeteoDayData,
+    Array.isArray(state.buoyData) ? state.buoyData[0] : state.buoyData,
+    dayData.length ? 'surfline' : (openMeteoDayData.length ? 'open-meteo' : 'buoy')
+  );
+  const verdict = calculateVerdict(verdictInput);
+  renderVerdictPanel(verdict);
+
+  // Forecast table
+  renderForecastTable(state.forecastData.surfline, state.forecastData.tides);
+
+  // Buoy panel
+  renderBuoyPanel(state.buoyData);
+
+  // Update timestamp
+  updateTimestamp();
+  updateDayDisplay();
+}
+
+// ─── Data Helpers ─────────────────────────────────────────────────────────────
+
+/**
+ * Get all intervals for a given day offset (0 = today).
+ */
+function getDaySlice(intervals, dayOffset) {
+  if (!intervals || intervals.length === 0) return [];
+
+  const now    = new Date();
+  const target = new Date(now);
+  target.setDate(target.getDate() + dayOffset);
+
+  const targetDay = target.toDateString();
+
+  return intervals.filter(entry => {
+    const d = new Date(entry.timestamp * 1000);
+    return d.toDateString() === targetDay;
+  });
+}
+
+/**
+ * Pick best single representative interval from a day slice.
+ * Prefer mid-morning (10am) or just pick first available.
+ */
+function getBestInterval(daySlice) {
+  if (!daySlice || daySlice.length === 0) return null;
+
+  // Prefer ~10am reading
+  const morning = daySlice.find(e => {
+    const h = new Date(e.timestamp * 1000).getHours();
+    return h >= 9 && h <= 12;
+  });
+  return morning || daySlice[0];
+}
+
+/**
+ * Build a simplified object for the verdict algorithm.
+ * sourceHint: 'surfline' | 'open-meteo' | 'buoy'
+ */
+function buildVerdictInput(daySlice, buoyData, sourceHint = 'surfline') {
+  const interval = getBestInterval(daySlice);
+  if (!interval) {
+    // Fall back to buoy data if no Surfline
+    if (buoyData && buoyData.latest) {
+      const b = buoyData.latest;
+      return {
+        wave:   { min: b.waveHeightFt || 0, max: (b.waveHeightFt || 0) * 1.2, period: b.dominantPeriod },
+        wind:   { speed: b.windSpeedKts || 0, direction: b.windDirection || '' },
+        tide:   null,
+        source: 'buoy'
+      };
+    }
+    return null;
+  }
+
+  // Get dominant swell direction
+  let swellDir = null;
+  if (interval.swells && interval.swells.length > 0) {
+    const dominant = interval.swells.reduce((a, b) => a.height >= b.height ? a : b);
+    swellDir = degToCompass(dominant.direction);
+  }
+
+  const windDirName = interval.wind
+    ? degToCompass(interval.wind.direction)
+    : '---';
+
+  return {
+    wave: {
+      min:    interval.surf ? interval.surf.min : 0,
+      max:    interval.surf ? interval.surf.max : 0,
+      period: (interval.swells && interval.swells[0]) ? interval.swells[0].period : 0,
+      swellDir
+    },
+    wind: {
+      speed:     interval.wind ? interval.wind.speed         : 0,
+      direction: windDirName,
+      gust:      interval.wind ? interval.wind.gust          : 0,
+      type:      interval.wind ? interval.wind.directionType : ''
+    },
+    tide:   interval.tide || null,
+    source: 'surfline'
+  };
+}
+
+// ─── Verdict Algorithm ────────────────────────────────────────────────────────
+
+/**
+ * Main scoring function. Returns 0-100.
+ * Tuned for Bolinas longboarding:
+ *   - Sweet spot: 2-6ft, 12-16s period, light offshore wind
+ */
+function computeScore(data) {
+  if (!data) return 0;
+
+  let score  = 50;
+  const reasons = [];
+
+  // ── Wave height ──
+  const waveMin = data.wave ? (data.wave.min || 0) : 0;
+  const waveMax = data.wave ? (data.wave.max || 0) : 0;
+  const waveMid = (waveMin + waveMax) / 2;
+
+  if (waveMid >= 2 && waveMid <= 4)       { score += 20; reasons.push({ text: `${waveMin}-${waveMax}FT IDEAL`,        cls: 'reason-good'    }); }
+  else if (waveMid > 4 && waveMid <= 6)   { score += 12; reasons.push({ text: `${waveMin}-${waveMax}FT OVERHEAD`,     cls: 'reason-good'    }); }
+  else if (waveMid > 6 && waveMid <= 10)  { score += 0;  reasons.push({ text: `${waveMin}-${waveMax}FT BIG`,          cls: 'reason-neutral' }); }
+  else if (waveMid > 10)                  { score -= 15; reasons.push({ text: `${waveMin}-${waveMax}FT TOO BIG`,      cls: 'reason-bad'     }); }
+  else if (waveMid >= 1 && waveMid < 2)   { score -= 10; reasons.push({ text: `${waveMin}-${waveMax}FT SMALL`,        cls: 'reason-neutral' }); }
+  else if (waveMid < 1)                   { score -= 30; reasons.push({ text: `${waveMin}-${waveMax}FT FLAT`,         cls: 'reason-bad'     }); }
+
+  // ── Period ──
+  const period = data.wave ? (data.wave.period || 0) : 0;
+  if (period >= 15)                        { score += 20; reasons.push({ text: `${period}S LONG PERIOD`,              cls: 'reason-good'    }); }
+  else if (period >= 12)                   { score += 12; reasons.push({ text: `${period}S GOOD PERIOD`,              cls: 'reason-good'    }); }
+  else if (period >= 10)                   { score += 6;  reasons.push({ text: `${period}S OK PERIOD`,                cls: 'reason-neutral' }); }
+  else if (period >= 8)                    { score -= 5;  reasons.push({ text: `${period}S SHORT PERIOD`,             cls: 'reason-neutral' }); }
+  else if (period > 0)                     { score -= 15; reasons.push({ text: `${period}S CHOPPY`,                   cls: 'reason-bad'     }); }
+
+  // ── Wind ──
+  const windSpeed = data.wind ? (data.wind.speed || 0) : 0;
+  const windDir   = data.wind ? (data.wind.direction || '') : '';
+  const windType  = data.wind ? (data.wind.type || '') : '';
+
+  const isOffshore = ['N','NE','E','NNE','ENE'].includes(windDir);
+  const isOnshore  = ['S','SW','W','SSW','WSW','SSE','SE'].includes(windDir);
+
+  if (windType === 'Offshore' || (isOffshore && windSpeed < 15)) {
+    if (windSpeed < 5)        { score += 18; reasons.push({ text: 'LIGHT OFFSHORE',                               cls: 'reason-good' }); }
+    else if (windSpeed < 10)  { score += 12; reasons.push({ text: `${windDir} ${windSpeed}KT OFFSHORE`,           cls: 'reason-good' }); }
+    else                      { score += 5;  reasons.push({ text: `${windDir} ${windSpeed}KT MOD OFFSHORE`,       cls: 'reason-good' }); }
+  } else if (windType === 'Onshore' || isOnshore) {
+    if (windSpeed < 5)        { score += 0;  reasons.push({ text: 'LIGHT ONSHORE',                                cls: 'reason-neutral' }); }
+    else if (windSpeed < 12)  { score -= 10; reasons.push({ text: `${windDir} ${windSpeed}KT ONSHORE`,            cls: 'reason-bad' }); }
+    else                      { score -= 20; reasons.push({ text: `${windDir} ${windSpeed}KT STRONG ONSHORE`,     cls: 'reason-bad' }); }
+  } else if (windSpeed < 5)  { score += 8;  reasons.push({ text: 'CALM WINDS',                                    cls: 'reason-good' }); }
+  else if (windSpeed > 20)   { score -= 18; reasons.push({ text: `${windSpeed}KT STRONG WIND`,                    cls: 'reason-bad' }); }
+
+  // ── Swell direction (NW/WNW best for Bolinas) ──
+  const swellDir = data.wave ? (data.wave.swellDir || '') : '';
+  if (['NW','WNW','NNW','W'].includes(swellDir)) {
+    score += 8; reasons.push({ text: `${swellDir} SWELL IDEAL`,                                                   cls: 'reason-good' });
+  } else if (['SW','WSW'].includes(swellDir)) {
+    score += 3; reasons.push({ text: `${swellDir} SWELL OK`,                                                      cls: 'reason-neutral' });
+  } else if (swellDir && !['N','NE'].includes(swellDir)) {
+    score -= 5; reasons.push({ text: `${swellDir} SWELL MARGINAL`,                                                cls: 'reason-neutral' });
+  }
+
+  return { score: Math.max(0, Math.min(100, Math.round(score))), reasons };
+}
+
+function calculateVerdict(data) {
+  const { score, reasons } = computeScore(data);
+
+  let verdict, cls;
+  if      (score >= 82) { verdict = '[ EPIC — HANG TEN ]';  cls = 'epic';     }
+  else if (score >= 62) { verdict = '[ WOULD GO ]';          cls = 'good';     }
+  else if (score >= 42) { verdict = '[ MAYBE... ]';          cls = 'marginal'; }
+  else                  { verdict = '[ STAY HOME ]';         cls = 'poor';     }
+
+  return { verdict, score, cls, reasons };
+}
+
+// ─── Render: Verdict Panel ────────────────────────────────────────────────────
+function renderVerdictPanel(verdict) {
+  const box      = document.getElementById('verdict-box');
+  const textEl   = document.getElementById('verdict-text');
+  const labelEl  = document.getElementById('verdict-label');
+  const stokeEl  = document.getElementById('stoke-bar');
+  const reasonEl = document.getElementById('verdict-reasons');
+
+  if (!box || !textEl) return;
+
+  // Update class
+  box.className = verdict.cls;
+
+  textEl.textContent = verdict.verdict;
+
+  // Label
+  const labels = { epic: 'SURF REPORT // EPIC SWELL INCOMING', good: 'SURF REPORT // CONDITIONS FAVORABLE', marginal: 'SURF REPORT // MARGINAL CONDITIONS', poor: 'SURF REPORT // CONDITIONS UNFAVORABLE' };
+  if (labelEl) labelEl.textContent = labels[verdict.cls] || 'SURF REPORT';
+
+  // Stoke meter
+  if (stokeEl) {
+    stokeEl.textContent = buildStokeMeter(verdict.score);
+  }
+
+  // Reasons
+  if (reasonEl) {
+    reasonEl.innerHTML = verdict.reasons
+      ? verdict.reasons.map(r => `<span class="reason-item ${r.cls}">[ ${r.text} ]</span>`).join(' ')
+      : '';
+  }
+}
+
+/**
+ * Build an ASCII stoke meter: [████████░░░░░░░░░░░░] 62%
+ */
+function buildStokeMeter(score) {
+  const total  = 20;
+  const filled = Math.round((score / 100) * total);
+  const empty  = total - filled;
+  const bar    = '█'.repeat(filled) + '░'.repeat(empty);
+  return `[ ${bar} ] ${score}%`;
+}
+
+// ─── Render: Forecast Table ───────────────────────────────────────────────────
+function renderForecastTable(intervals, tides) {
+  const wrap = document.getElementById('forecast-table-wrap');
+  if (!wrap) return;
+
+  if (!intervals || intervals.length === 0) {
+    wrap.innerHTML = buildErrorBox('NO SURFLINE DATA AVAILABLE');
+    return;
+  }
+
+  // Build one row per interval, grouped visually by day
+  const rows = [];
+  let lastDay = '';
+
+  intervals.forEach(entry => {
+    const dt       = new Date(entry.timestamp * 1000);
+    const dayStr   = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }).toUpperCase();
+    const timeStr  = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const isToday  = dt.toDateString() === new Date().toDateString();
+    const isNow    = Math.abs(dt - new Date()) < 3 * 60 * 60 * 1000; // within 3h
+
+    const waveMin  = entry.surf ? entry.surf.min : 0;
+    const waveMax  = entry.surf ? entry.surf.max : 0;
+    const waveStr  = formatWaveHeight(waveMin, waveMax);
+
+    // Dominant swell period
+    let period = 0;
+    let swellDir = '---';
+    if (entry.swells && entry.swells.length > 0) {
+      const dom = entry.swells.reduce((a, b) => a.height >= b.height ? a : b);
+      period   = dom.period || 0;
+      swellDir = degToCompass(dom.direction);
+    }
+    const periodStr = period > 0 ? `${period}s` : '---';
+
+    // Wind
+    const windSpeed = entry.wind ? entry.wind.speed         : null;
+    const windDeg   = entry.wind ? entry.wind.direction     : null;
+    const windDir   = degToCompass(windDeg);
+    const windStr   = windSpeed !== null ? `${windDir} ${Math.round(windSpeed)}kt` : '---';
+
+    // Tide (closest)
+    const tideHeight = entry.tide ? entry.tide.height : null;
+    const tideStr    = tideHeight !== null ? `${tideHeight.toFixed(1)}ft` : '----';
+
+    // Star rating: derive from wave + period for display
+    const stars = computeStarRating(waveMin, waveMax, period, windSpeed,
+      entry.wind ? entry.wind.directionType : '');
+
+    // Colour coding for wave height
+    let waveCls = 'tbl-data';
+    if (waveMin >= 3 && waveMax <= 8) waveCls = 'tbl-good';
+    else if (waveMax > 8)             waveCls = 'tbl-amber';
+    else if (waveMax < 1.5)          waveCls = 'tbl-poor';
+
+    // Day separator
+    if (dayStr !== lastDay) {
+      lastDay = dayStr;
+      rows.push({ type: 'separator', day: dayStr, isToday });
+    }
+
+    rows.push({
+      type: 'data',
+      dayStr, timeStr, waveStr, periodStr, windStr, tideStr, stars, waveCls,
+      isNow
+    });
+  });
+
+  // Build ASCII table string
+  const COL_DATE   = 11;
+  const COL_TIME   = 6;
+  const COL_WAVES  = 10;
+  const COL_PERIOD = 8;
+  const COL_WIND   = 12;
+  const COL_TIDE   = 7;
+  const COL_STARS  = 7;
+
+  function pad(s, len) {
+    const str = String(s);
+    return str.length >= len ? str.slice(0, len) : str + ' '.repeat(len - str.length);
+  }
+
+  const totalW = COL_DATE + COL_TIME + COL_WAVES + COL_PERIOD + COL_WIND + COL_TIDE + COL_STARS + 16; // pipes and spaces
+
+  const TOP    = '╔' + '═'.repeat(totalW) + '╗';
+  const HDR_SEP= '╠' + '═'.repeat(totalW) + '╣';
+  const DAY_SEP= '╟' + '─'.repeat(totalW) + '╢';
+  const BOT    = '╚' + '═'.repeat(totalW) + '╝';
+
+  const header = `║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║`;
+
+  let html = `<pre class="forecast-table">`;
+  html += `<span class="tbl-border">${escHtml(TOP)}\n`;
+  html += `</span><span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║\n</span>`;
+  html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
+
+  rows.forEach(row => {
+    if (row.type === 'separator') {
+      html += `<span class="tbl-border">${escHtml(DAY_SEP)}\n</span>`;
+      const label = row.isToday ? `── ${row.day} (TODAY) ──` : `── ${row.day} ──`;
+      html += `<span class="tbl-header">║  ${pad(label, totalW - 2)}║\n</span>`;
+    } else {
+      const cls    = row.isNow ? 'tbl-current' : '';
+      const prefix = row.isNow ? '▶ ' : '  ';
+      html += `<span class="tbl-border ${cls}">║</span>`;
+      html += `<span class="tbl-data ${cls}">${prefix}${pad(row.timeStr, COL_DATE + COL_TIME)}`;
+      html += `  </span><span class="${row.waveCls} ${cls}">${pad(row.waveStr, COL_WAVES)}</span>`;
+      html += `<span class="tbl-data ${cls}">${pad(row.periodStr, COL_PERIOD)}`;
+      html += `${pad(row.windStr, COL_WIND)}${pad(row.tideStr, COL_TIDE)}</span>`;
+      html += `<span class="tbl-data ${cls}">${renderStars(row.stars)}  </span>`;
+      html += `<span class="tbl-border ${cls}">║\n</span>`;
+    }
+  });
+
+  html += `<span class="tbl-border">${escHtml(BOT)}\n</span>`;
+  html += `</pre>`;
+
+  wrap.innerHTML = html;
+}
+
+function computeStarRating(waveMin, waveMax, period, windSpeed, windType) {
+  let stars = 2.5;
+  const mid = (waveMin + waveMax) / 2;
+  if (mid >= 2 && mid <= 5) stars += 1;
+  else if (mid < 1)          stars -= 1.5;
+  else if (mid > 8)          stars -= 0.5;
+  if (period >= 14)          stars += 0.5;
+  else if (period < 8)       stars -= 0.5;
+  if (windType === 'Offshore') stars += 0.5;
+  else if (windType === 'Onshore' && windSpeed > 10) stars -= 1;
+  return Math.max(0, Math.min(5, Math.round(stars * 2) / 2));
+}
+
+function renderStars(rating) {
+  // 5-star scale in half-star increments, rendered with ★ and ☆
+  const full  = Math.floor(rating);
+  const half  = rating % 1 >= 0.5 ? 1 : 0;
+  const empty = 5 - full - half;
+  return (
+    `<span class="star-filled">${'★'.repeat(full)}</span>` +
+    (half ? `<span class="star-filled">½</span>` : '') +
+    `<span class="star-empty">${'☆'.repeat(empty)}</span>`
+  );
+}
+
+// ─── Render: Buoy Panel ───────────────────────────────────────────────────────
+function renderBuoyPanel(buoyDataArr) {
+  const wrap = document.getElementById('buoy-data-wrap');
+  if (!wrap) return;
+
+  const arr = Array.isArray(buoyDataArr) ? buoyDataArr : [buoyDataArr];
+  if (!arr.length) {
+    wrap.innerHTML = buildErrorBox('BUOY DATA UNAVAILABLE');
+    return;
+  }
+
+  wrap.innerHTML = arr.map(buoyData => buildBuoyCard(buoyData)).join('');
+}
+
+function buildBuoyCard(buoyData) {
+  if (!buoyData || buoyData.error) {
+    return buildErrorBox(buoyData ? `BUOY ERROR: ${buoyData.error}` : 'BUOY DATA UNAVAILABLE');
+  }
+
+  const b = buoyData.latest;
+  if (!b) return buildErrorBox(`NO READINGS: ${buoyData.name || buoyData.buoyId}`);
+
+  const name      = (buoyData.name || `BUOY ${buoyData.buoyId}`).toUpperCase();
+  const wvht      = b.waveHeightFt   !== null ? `${b.waveHeightFt} FT`            : 'N/A';
+  const period    = b.dominantPeriod !== null ? `${b.dominantPeriod}s`             : 'N/A';
+  const windSpeed = b.windSpeedKts   !== null ? `${b.windSpeedKts} KT`             : 'N/A';
+  const windDir   = b.windDirection  || 'N/A';
+  const waterTemp = b.waterTempF     !== null ? `${b.waterTempF}°F`               : 'N/A';
+  const swellDir  = b.swellDirectionCompass   || 'N/A';
+  const gust      = b.windGustKts    !== null ? `${b.windGustKts} KT`             : 'N/A';
+
+  const updated = b.timestamp
+    ? new Date(b.timestamp).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Los_Angeles', timeZoneName: 'short' })
+    : 'UNKNOWN';
+
+  const W = 42; // inner content width
+  function row(label, value) {
+    const l = label.padEnd(12);
+    const v = value.padEnd(W - 14);
+    return `│ <span class="buoy-label">${escHtml(l)}</span><span class="buoy-value">${escHtml(v)}</span>│\n`;
+  }
+  const titlePad = '─'.repeat(Math.max(0, W - name.length - 1));
+
+  let html = `<pre class="buoy-card">`;
+  html += `<span class="buoy-border">┌─ </span><span class="buoy-title">${escHtml(name)}</span><span class="buoy-border"> ${titlePad}┐\n</span>`;
+  html += row('WAVE HT:',    wvht);
+  html += row('PERIOD:',     period);
+  html += row('SWELL DIR:',  swellDir);
+  html += row('WIND:',       `${windDir} ${windSpeed}`);
+  html += row('GUSTS:',      gust);
+  html += row('WATER TEMP:', waterTemp);
+  html += row('UPDATED:',    updated);
+  html += `<span class="buoy-border">└${'─'.repeat(W + 2)}┘\n</span>`;
+  html += `</pre>`;
+  return html;
+}
+
+// ─── Render: Error ────────────────────────────────────────────────────────────
+function renderError(message) {
+  const wrap = document.getElementById('forecast-table-wrap');
+  if (wrap) {
+    wrap.innerHTML = buildErrorBox(`DATA FEED ERROR: ${message}`);
+  }
+
+  const verdictBox = document.getElementById('verdict-box');
+  if (verdictBox) {
+    verdictBox.className = 'poor';
+    const vt = document.getElementById('verdict-text');
+    if (vt) vt.textContent = '[ ERROR: SURF DATA UNAVAILABLE ]';
+  }
+}
+
+function buildErrorBox(msg) {
+  const inner = msg.toUpperCase();
+  const w     = Math.max(inner.length + 4, 48);
+  return `<pre class="error-box"><span class="err-border">╔${'═'.repeat(w)}╗\n║  </span><span class="err-text">${escHtml(inner.padEnd(w - 2))}</span><span class="err-border">║\n╚${'═'.repeat(w)}╝</span></pre>`;
+}
+
+// ─── Render: Spot Selector ────────────────────────────────────────────────────
+function renderSpotSelector() {
+  const el = document.getElementById('spot-selector');
+  if (!el) return;
+
+  const html = Object.entries(SPOTS).map(([key, spot]) => {
+    const active = key === state.currentSpot ? ' active' : '';
+    return `<button class="spot-btn${active}" onclick="selectSpot('${key}')" data-spot="${key}">${escHtml(spot.name.toUpperCase())}</button>`;
+  }).join('');
+
+  el.innerHTML = html;
+}
+
+window.selectSpot = function(spotKey) {
+  if (spotKey === state.currentSpot) return;
+  state.currentSpot = spotKey;
+  state.currentDay  = 0;
+
+  // Update button states
+  document.querySelectorAll('.spot-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.spot === spotKey);
+  });
+
+  // Update footer coords
+  const spot = SPOTS[spotKey];
+  if (spot) {
+    const coordEl = document.getElementById('coord-line');
+    if (coordEl) {
+      const latDir = spot.lat >= 0 ? 'N' : 'S';
+      const lonDir = spot.lon <= 0 ? 'W' : 'E';
+      coordEl.textContent = `LAT: ${Math.abs(spot.lat).toFixed(4)}° ${latDir}  |  LON: ${Math.abs(spot.lon).toFixed(4)}° ${lonDir}  |  ${spot.name.toUpperCase()}, ${spot.region.toUpperCase()}, CA`;
+    }
+  }
+
+  loadForecast(spotKey);
+};
+
+// ─── Render: Date Nav ─────────────────────────────────────────────────────────
+function renderDateNav() {
+  updateDayDisplay();
+}
+
+function updateDayDisplay() {
+  const el = document.getElementById('day-display');
+  if (!el) return;
+
+  const MAX_DAYS = 4;
+  const labels   = ['TODAY', 'TOMORROW', '+2 DAYS', '+3 DAYS', '+4 DAYS'];
+
+  el.textContent = labels[state.currentDay] || `+${state.currentDay} DAYS`;
+
+  const prev = document.getElementById('btn-prev');
+  const next = document.getElementById('btn-next');
+  if (prev) prev.disabled = state.currentDay <= 0;
+  if (next) next.disabled = state.currentDay >= MAX_DAYS;
+}
+
+window.prevDay = function() {
+  if (state.currentDay > 0) {
+    state.currentDay--;
+    if (state.forecastData) render();
+  }
+};
+
+window.nextDay = function() {
+  if (state.currentDay < 4) {
+    state.currentDay++;
+    if (state.forecastData) render();
+  }
+};
+
+// ─── Loading State ────────────────────────────────────────────────────────────
+function setLoading(bool) {
+  state.loading = bool;
+
+  const fill  = document.getElementById('loading-fill');
+  const label = document.getElementById('loading-label');
+
+  if (bool) {
+    if (fill)  { fill.classList.add('loading-pulse'); fill.style.width = '0%'; }
+    if (label) label.textContent = 'FETCHING...';
+  } else {
+    if (fill)  { fill.classList.remove('loading-pulse'); fill.style.width = '100%'; }
+    if (label) label.textContent = 'READY';
+    // Reset fill to 0 after a moment
+    setTimeout(() => { if (fill) fill.style.width = '0%'; }, 1500);
+  }
+}
+
+// ─── Timestamp ────────────────────────────────────────────────────────────────
+function updateTimestamp() {
+  const el = document.getElementById('last-updated');
+  if (!el || !state.lastUpdated) return;
+
+  const d = state.lastUpdated;
+  el.textContent = d.toLocaleTimeString('en-US', {
+    hour:     '2-digit',
+    minute:   '2-digit',
+    timeZone: 'America/Los_Angeles',
+    timeZoneName: 'short'
+  });
+}
+
+// ─── Surfer Animation ─────────────────────────────────────────────────────────
+/**
+ * Gently oscillate the surfer's horizontal position in sync with the wave
+ * scroll animation (5s period). Uses requestAnimationFrame for smoothness.
+ */
+function startSurferAnimation() {
+  const surferWrapper = document.querySelector('.surfer-wrapper');
+  if (!surferWrapper) return;
+
+  const WAVE_PERIOD_MS = 5000;    // matches CSS animation
+  const DRIFT_AMOUNT   = 6;       // pixels of horizontal sway
+  const BASE_LEFT_PCT  = 12;      // base % from left
+
+  let start = null;
+
+  function frame(ts) {
+    if (!start) start = ts;
+    const elapsed = ts - start;
+
+    // Gentle sine wave horizontal drift following wave
+    const phase   = (elapsed % WAVE_PERIOD_MS) / WAVE_PERIOD_MS;
+    const driftX  = Math.sin(phase * 2 * Math.PI) * DRIFT_AMOUNT;
+
+    surferWrapper.style.left = `calc(${BASE_LEFT_PCT}% + ${driftX}px)`;
+
+    requestAnimationFrame(frame);
+  }
+
+  requestAnimationFrame(frame);
+}
+
+// ─── Format Helpers ───────────────────────────────────────────────────────────
+function formatWaveHeight(min, max) {
+  if (min === 0 && max === 0) return 'FLAT';
+  if (min === max)             return `${min} FT`;
+  return `${min}-${max} FT`;
+}
+
+function formatWind(speed, dir) {
+  if (speed === null || speed === undefined) return 'N/A';
+  return `${dir} ${Math.round(speed)}kts`;
+}
+
+function formatTimestamp(unix) {
+  if (!unix) return '--:--';
+  return new Date(unix * 1000).toLocaleTimeString('en-US', {
+    hour:   '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+}
+
+// ─── HTML Escaping ────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}

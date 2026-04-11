@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="JL Would Go - Surf forecast aggregator for Bolinas and NorCal spots" />
+  <title>JL WOULD GO // SURF PREDICTION SYSTEM</title>
+
+  <!-- Retro terminal fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap" rel="stylesheet" />
+
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- CRT effects overlay layers -->
+  <div id="scanlines"></div>
+  <div id="crt-overlay"></div>
+
+  <div class="terminal-container">
+
+    <!-- ═══════════════════════════════════ HEADER ══════════════════════════════════ -->
+    <header>
+      <pre id="ascii-logo" aria-label="JL WOULD GO">
+     ██╗██╗         ██╗    ██╗ ██████╗ ██╗   ██╗██╗     ██████╗      ██████╗  ██████╗
+     ██║██║         ██║    ██║██╔═══██╗██║   ██║██║     ██╔══██╗    ██╔════╝ ██╔═══██╗
+     ██║██║         ██║ █╗ ██║██║   ██║██║   ██║██║     ██║  ██║    ██║  ███╗██║   ██║
+██   ██║██║         ██║███╗██║██║   ██║██║   ██║██║     ██║  ██║    ██║   ██║██║   ██║
+╚█████╔╝███████╗    ╚███╔███╔╝╚██████╔╝╚██████╔╝███████╗██████╔╝    ╚██████╔╝╚██████╔╝
+ ╚════╝ ╚══════╝     ╚══╝╚══╝  ╚═════╝  ╚═════╝ ╚══════╝╚═════╝      ╚═════╝  ╚═════╝
+      </pre>
+      <div id="system-status">
+        <span class="blink-cursor">▋</span>
+        SURF PREDICTION SYSTEM v1.0 // BOLINAS, CA &amp; NEARBY NORCAL SPOTS
+        <span class="blink-cursor">▋</span>
+      </div>
+    </header>
+
+    <!-- ════════════════════════════════ WAVE ANIMATION ═════════════════════════════ -->
+    <div id="surf-animation" aria-hidden="true">
+      <div class="ocean">
+
+        <!-- Background waves (slow, dim) -->
+        <div class="wave-row wave-bg-1">
+          <span class="wave-content">〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜〜</span>
+        </div>
+        <div class="wave-row wave-bg-2">
+          <span class="wave-content">∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿∿</span>
+        </div>
+
+        <!-- Surfer row – animated surfer on the main wave crest -->
+        <div class="wave-row wave-main" id="wave-main-row">
+          <div class="surfer-wrapper">
+            <div class="surfer" id="surfer">
+<pre class="surfer-art">  o/
+ /|
+ / \</pre>
+            </div>
+          </div>
+          <span class="wave-content wave-crest">╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮╭──╮</span>
+        </div>
+
+        <!-- Front face of wave -->
+        <div class="wave-row wave-face">
+          <span class="wave-content">╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯╰──╯</span>
+        </div>
+        <div class="wave-row wave-mid">
+          <span class="wave-content">≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋≋</span>
+        </div>
+
+        <!-- Deep water -->
+        <div class="wave-row wave-deep-1">
+          <span class="wave-content">~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·~·</span>
+        </div>
+        <div class="wave-row wave-deep-2">
+          <span class="wave-content">·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·  ·</span>
+        </div>
+
+      </div><!-- /.ocean -->
+    </div><!-- /#surf-animation -->
+
+    <!-- ═══════════════════════════════════ CONTROLS ═════════════════════════════════ -->
+    <div id="controls">
+      <div id="spot-selector-wrap">
+        <div class="ctrl-label">▶ SELECT BREAK:</div>
+        <div id="spot-selector">
+          <!-- Populated by app.js -->
+          <div class="loading-spots">LOADING SPOTS...</div>
+        </div>
+      </div>
+      <div id="date-nav">
+        <div class="ctrl-label">▶ FORECAST DAY:</div>
+        <div id="date-nav-btns">
+          <button class="day-btn" id="btn-prev" onclick="prevDay()">◀ PREV</button>
+          <span id="day-display" class="day-display">TODAY</span>
+          <button class="day-btn" id="btn-next" onclick="nextDay()">NEXT ▶</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ═════════════════════════════════ VERDICT PANEL ══════════════════════════════ -->
+    <div id="verdict-panel">
+      <div id="verdict-box" class="verdict-loading">
+        <div id="verdict-label">ANALYZING CONDITIONS...</div>
+        <div id="verdict-text">[ LOADING ]</div>
+        <div id="stoke-meter-wrap">
+          <span class="stoke-label">STOKE LEVEL:</span>
+          <span id="stoke-bar">[ ░░░░░░░░░░░░░░░░░░░░ ] 0%</span>
+        </div>
+        <div id="verdict-reasons"></div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ FORECAST ═════════════════════════════════ -->
+    <div id="forecast-grid">
+      <div class="section-header">▶ 5-DAY FORECAST // <span id="forecast-spot-name">--</span></div>
+      <div id="forecast-table-wrap">
+        <div class="terminal-msg">AWAITING DATA FEED...</div>
+      </div>
+    </div>
+
+    <!-- ════════════════════════════════ BUOY PANEL ══════════════════════════════════ -->
+    <div id="buoy-panel">
+      <div class="section-header">▶ REAL-TIME BUOY DATA</div>
+      <div id="buoy-data-wrap">
+        <div class="terminal-msg">CONNECTING TO NOAA BUOYS...</div>
+      </div>
+    </div>
+
+    <!-- ═══════════════════════════════════ FOOTER ═══════════════════════════════════ -->
+    <footer>
+      <div id="loading-bar-wrap">
+        <div id="loading-bar">
+          <div id="loading-fill"></div>
+        </div>
+        <span id="loading-label">READY</span>
+      </div>
+      <div id="status-line">
+        SYSTEM: ONLINE // LAST UPDATED: <span id="last-updated">--:-- PST</span>
+        &nbsp;//&nbsp; SOURCE: SURFLINE + NOAA BUOYS
+        &nbsp;//&nbsp; <a href="#" onclick="refreshData(); return false;" class="refresh-link">[ REFRESH ]</a>
+      </div>
+      <div id="coord-line">
+        LAT: 37.9091° N &nbsp;|&nbsp; LON: 122.6830° W &nbsp;|&nbsp; BOLINAS LAGOON, MARIN COUNTY, CA
+      </div>
+    </footer>
+
+  </div><!-- /.terminal-container -->
+
+  <script src="app.js"></script>
+</body>
+</html>
