@@ -1,47 +1,58 @@
 /* ═══════════════════════════════════════════════════════════════════════════════
-   JL WOULD GO — 90s Surf / Neon Terminal Stylesheet
+   JL WOULD GO — Beach Blues / Colorblind-Friendly Terminal Stylesheet
+   Palette uses luminance AND hue as differentiators — safe for deuteranopia,
+   protanopia, and tritanopia. Blue/yellow/amber are the core accent trio.
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* ─── Custom Properties ─────────────────────────────────────────────────────── */
 :root {
-  --bg:         #08060f;            /* deep purple-black                     */
-  --primary:    #ff2d95;            /* hot pink — main UI chrome             */
-  --secondary:  #00e5cc;            /* electric teal — secondary accents     */
-  --dim:        #4a0a30;            /* dim pink for borders/bg               */
-  --mid:        #cc1a78;            /* mid pink for labels                   */
-  --bright:     #ff80c8;            /* light pink highlight                  */
-  --neon-yellow:#f5ff00;            /* neon yellow — star ratings / tide     */
-  --neon-green: #00ff8c;            /* neon lime — good conditions           */
-  --orange:     #ff7c00;            /* neon orange — marginal                */
-  --red:        #ff2d55;            /* hot red — scary/poor                  */
-  --swim:       #00e5ff;            /* electric cyan — swim day              */
-  --wave:       #00b4d8;            /* ocean blue for wave chars             */
-  --wave-crest: #90e0ef;            /* foam white-blue                       */
-  --wave-dim:   #023e5c;            /* dark wave background                  */
-  --text:       #ffb3d9;            /* soft pink body text                   */
-  --border:     #ff2d95;            /* hot pink border                       */
-  --glow:       0 0 6px #ff2d95, 0 0 14px #ff2d95, 0 0 28px rgba(255,45,149,0.45);
-  --glow-sm:    0 0 4px #ff2d95, 0 0 10px rgba(255,45,149,0.5);
-  --glow-teal:  0 0 6px #00e5cc, 0 0 14px rgba(0,229,204,0.45);
-  --glow-teal-sm:0 0 4px #00e5cc, 0 0 8px rgba(0,229,204,0.4);
-  --glow-yellow:0 0 6px #f5ff00, 0 0 14px rgba(245,255,0,0.5);
-  --glow-green: 0 0 6px #00ff8c, 0 0 14px rgba(0,255,140,0.45);
-  --glow-orange:0 0 6px #ff7c00, 0 0 12px rgba(255,124,0,0.45);
-  --glow-red:   0 0 6px #ff2d55, 0 0 12px rgba(255,45,85,0.45);
-  --glow-cyan:  0 0 6px #00e5ff, 0 0 14px rgba(0,229,255,0.5);
+  /* ── Base ── */
+  --bg:          #0b1622;          /* deep ocean navy                        */
+  --text:        #c8dff0;          /* soft sky-white body text               */
+  --border:      #2e6090;          /* steel blue border                      */
+  --dim:         #1a3550;          /* dark navy dim borders                  */
+  --mid:         #4a80a8;          /* medium steel blue labels               */
+  --bright:      #a0c8e8;          /* light sky blue highlight               */
+
+  /* ── Primary UI — sky blue ── */
+  --primary:     #5b9bd5;
+  --glow:        0 0 6px #5b9bd5, 0 0 14px rgba(91,155,213,0.45);
+  --glow-sm:     0 0 4px #5b9bd5, 0 0 8px rgba(91,155,213,0.35);
+
+  /* ── Verdict palette — distinct luminance AND hue, colorblind-safe ──
+     Luminance order (light → dark): stoke > swim > good > maybe > chunky > scary
+     Hue order: yellow / periwinkle / sky-blue / seafoam / amber / burnt-orange
+  ── */
+  --stoke:       #f5c518;   /* bright gold — highest luminance, unmistakable  */
+  --glow-stoke:  0 0 8px #f5c518, 0 0 20px rgba(245,197,24,0.45);
+
+  --swim:        #90caf9;   /* soft periwinkle — high luminance, airy          */
+  --glow-swim:   0 0 6px #90caf9, 0 0 14px rgba(144,202,249,0.4);
+
+  --good:        #5b9bd5;   /* sky blue — medium-high luminance                */
+  --glow-good:   0 0 6px #5b9bd5, 0 0 14px rgba(91,155,213,0.4);
+
+  --maybe:       #4db6a0;   /* seafoam teal — medium luminance                 */
+  --glow-maybe:  0 0 6px #4db6a0, 0 0 12px rgba(77,182,160,0.35);
+
+  --chunky:      #c8860a;   /* warm amber — medium-low luminance               */
+  --glow-chunky: 0 0 6px #c8860a, 0 0 12px rgba(200,134,10,0.4);
+
+  --scary:       #b84820;   /* burnt orange — lowest luminance, clearly urgent */
+  --glow-scary:  0 0 6px #b84820, 0 0 12px rgba(184,72,32,0.4);
+
+  /* ── Wave canvas background fallback ── */
+  --wave-dim:    #1a3a5c;
 }
 
 /* ─── Reset ──────────────────────────────────────────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 /* ─── Base ───────────────────────────────────────────────────────────────────── */
-html {
-  font-size: 16px;
-  scroll-behavior: smooth;
-}
+html { font-size: 16px; scroll-behavior: smooth; }
 
 body {
-  background-color: var(--bg);
+  background: linear-gradient(180deg, #0d1e30 0%, #0b1622 50%);
   color: var(--text);
   font-family: 'VT323', 'Courier New', monospace;
   font-size: 1.1rem;
@@ -61,18 +72,18 @@ a:hover { text-shadow: var(--glow-sm); }
     0deg,
     transparent,
     transparent 2px,
-    rgba(0, 0, 0, 0.18) 2px,
-    rgba(0, 0, 0, 0.18) 4px
+    rgba(0, 0, 0, 0.12) 2px,
+    rgba(0, 0, 0, 0.12) 4px
   );
   pointer-events: none;
   z-index: 1000;
 }
 
-/* ─── CRT Vignette / Glow ────────────────────────────────────────────────────── */
+/* ─── CRT Vignette ───────────────────────────────────────────────────────────── */
 #crt-overlay {
   position: fixed;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.75) 100%);
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.65) 100%);
   pointer-events: none;
   z-index: 999;
 }
@@ -83,7 +94,7 @@ a:hover { text-shadow: var(--glow-sm); }
   margin: 0 auto;
   padding: 1rem 1.5rem 2rem;
   border: 1px solid var(--border);
-  box-shadow: var(--glow), inset 0 0 80px rgba(255, 45, 149, 0.03);
+  box-shadow: var(--glow), inset 0 0 80px rgba(91,155,213,0.03);
   min-height: 100vh;
   position: relative;
 }
@@ -96,7 +107,6 @@ header {
   margin-bottom: 0.5rem;
 }
 
-/* ASCII Logo */
 #ascii-logo {
   font-family: 'Courier New', monospace;
   font-size: clamp(0.35rem, 1vw, 0.75rem);
@@ -113,10 +123,10 @@ header {
 
 @keyframes logoFlicker {
   0%, 95%, 100% { opacity: 1; }
-  96%           { opacity: 0.85; }
-  97%           { opacity: 1; }
-  98%           { opacity: 0.7; }
-  99%           { opacity: 1; }
+  96%            { opacity: 0.8; }
+  97%            { opacity: 1;   }
+  98%            { opacity: 0.65;}
+  99%            { opacity: 1;   }
 }
 
 #system-status {
@@ -128,162 +138,31 @@ header {
 }
 
 /* ─── Blinking Cursor ────────────────────────────────────────────────────────── */
-.blink-cursor {
-  animation: blink 1s step-end infinite;
-  color: var(--primary);
-}
+.blink-cursor { animation: blink 1s step-end infinite; color: var(--primary); }
 
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0; }
 }
 
-/* ─── Wave / Surf Animation ──────────────────────────────────────────────────── */
+/* ─── Canvas Wave Animation ──────────────────────────────────────────────────── */
 #surf-animation {
   width: 100%;
   overflow: hidden;
-  height: 140px;
+  height: 160px;
   border: 1px solid var(--wave-dim);
   border-radius: 2px;
   margin: 0.75rem 0;
-  background: linear-gradient(180deg, #04080f 0%, #021529 60%, #02233d 100%);
+  background: #0a1e34;           /* fallback while canvas loads              */
   position: relative;
-  box-shadow: inset 0 0 30px rgba(0, 180, 216, 0.07);
 }
 
-.ocean {
-  position: absolute;
-  bottom: 0;
-  left: 0;
+#surf-canvas {
   width: 100%;
   height: 100%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-}
-
-.wave-row {
-  white-space: nowrap;
-  overflow: hidden;
-  position: relative;
-  font-family: 'Courier New', monospace;
-  font-size: 0.85rem;
-  line-height: 1.2;
-  letter-spacing: 0;
-}
-
-.wave-content {
-  display: inline-block;
-  /* doubled so seamless scroll works */
-  white-space: nowrap;
-}
-
-/* Background waves */
-.wave-bg-1 {
-  color: #023e5c;
-  opacity: 0.6;
-}
-.wave-bg-1 .wave-content {
-  animation: waveScroll 9s linear infinite;
-}
-
-.wave-bg-2 {
-  color: #01263b;
-  opacity: 0.5;
-}
-.wave-bg-2 .wave-content {
-  animation: waveScroll 12s linear infinite reverse;
-}
-
-/* Main crest + surfer row */
-.wave-main {
-  position: relative;
-  color: var(--wave-crest);
-  font-size: 0.9rem;
-  z-index: 10;
-}
-.wave-main .wave-crest {
-  animation: waveScroll 5s linear infinite;
-  color: var(--wave-crest);
-  text-shadow: 0 0 4px var(--swim), 0 0 10px rgba(0, 180, 216, 0.5);
-}
-
-/* Wave face row (directly under crest) */
-.wave-face {
-  color: var(--wave);
-}
-.wave-face .wave-content {
-  animation: waveScroll 5s linear infinite;
-}
-
-/* Middle water */
-.wave-mid {
-  color: #0077a8;
-  font-size: 0.8rem;
-}
-.wave-mid .wave-content {
-  animation: waveScroll 7s linear infinite;
-}
-
-/* Deep water rows */
-.wave-deep-1 {
-  color: #00334d;
-  font-size: 0.75rem;
-  opacity: 0.7;
-}
-.wave-deep-1 .wave-content {
-  animation: waveScroll 11s linear infinite reverse;
-}
-
-.wave-deep-2 {
-  color: #011d2e;
-  font-size: 0.7rem;
-  opacity: 0.4;
-}
-.wave-deep-2 .wave-content {
-  animation: waveScroll 15s linear infinite;
-}
-
-/* ─── Wave Scroll Keyframe ───────────────────────────────────────────────────── */
-@keyframes waveScroll {
-  from { transform: translateX(0); }
-  to   { transform: translateX(-50%); }
-}
-
-/* ─── Surfer ─────────────────────────────────────────────────────────────────── */
-.surfer-wrapper {
-  position: absolute;
-  top: -36px;
-  left: 12%;
-  z-index: 20;
-  animation: surferBob 2.4s ease-in-out infinite, surferDrift 5s linear infinite;
-}
-
-.surfer {
-  display: inline-block;
-}
-
-.surfer-art {
-  font-family: 'Courier New', monospace;
-  font-size: 0.8rem;
-  line-height: 1.1;
-  color: var(--neon-yellow);
-  text-shadow: 0 0 6px var(--neon-yellow), 0 0 14px rgba(245,255,0,0.6);
-  margin: 0;
-  white-space: pre;
-}
-
-@keyframes surferBob {
-  0%, 100% { transform: translateY(0px)   rotate(-2deg); }
-  25%       { transform: translateY(-4px)  rotate(1deg);  }
-  50%       { transform: translateY(-2px)  rotate(-1deg); }
-  75%       { transform: translateY(-5px)  rotate(2deg);  }
-}
-
-@keyframes surferDrift {
-  /* Surfer rides across the wave crest in sync with the wave scroll */
-  0%   { left: 12%; }
-  100% { left: 12%; }
+  display: block;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;  /* keep NES pixels crisp, no blur           */
 }
 
 /* ─── Controls ───────────────────────────────────────────────────────────────── */
@@ -294,7 +173,7 @@ header {
   margin: 0.75rem 0;
   padding: 0.75rem;
   border: 1px solid var(--dim);
-  background: rgba(8, 6, 15, 0.7);
+  background: rgba(11,22,34,0.7);
 }
 
 .ctrl-label {
@@ -304,13 +183,8 @@ header {
   letter-spacing: 0.08em;
 }
 
-#spot-selector-wrap {
-  flex: 2 1 400px;
-}
-
-#date-nav {
-  flex: 1 1 220px;
-}
+#spot-selector-wrap { flex: 2 1 400px; }
+#date-nav           { flex: 1 1 220px; }
 
 #spot-selector {
   display: flex;
@@ -337,14 +211,12 @@ header {
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
-
 .spot-btn:hover {
   border-color: var(--primary);
   color: var(--primary);
   text-shadow: var(--glow-sm);
-  box-shadow: 0 0 8px rgba(0,255,65,0.3);
+  box-shadow: 0 0 8px rgba(91,155,213,0.3);
 }
-
 .spot-btn.active {
   border-color: var(--primary);
   color: var(--bg);
@@ -371,17 +243,12 @@ header {
   cursor: pointer;
   transition: all 0.15s ease;
 }
-
 .day-btn:hover {
   border-color: var(--primary);
   color: var(--primary);
-  box-shadow: 0 0 8px rgba(0,255,65,0.2);
+  box-shadow: 0 0 8px rgba(91,155,213,0.2);
 }
-
-.day-btn:disabled {
-  opacity: 0.3;
-  cursor: not-allowed;
-}
+.day-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
 .day-display {
   color: var(--bright);
@@ -392,15 +259,13 @@ header {
 }
 
 /* ─── Verdict Panel ──────────────────────────────────────────────────────────── */
-#verdict-panel {
-  margin: 0.75rem 0;
-}
+#verdict-panel { margin: 0.75rem 0; }
 
 #verdict-box {
   border: 2px solid var(--dim);
   padding: 1rem 1.5rem;
   text-align: center;
-  background: rgba(8, 6, 15, 0.75);
+  background: rgba(11,22,34,0.8);
   transition: border-color 0.4s ease, box-shadow 0.4s ease, background 0.4s ease;
   position: relative;
   overflow: hidden;
@@ -410,7 +275,7 @@ header {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.5) 100%);
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.4) 100%);
   pointer-events: none;
 }
 
@@ -424,92 +289,50 @@ header {
 
 #verdict-text {
   font-family: 'Press Start 2P', monospace;
-  font-size: clamp(1rem, 4vw, 2.2rem);
+  font-size: clamp(0.95rem, 4vw, 2.1rem);
   letter-spacing: 0.05em;
   line-height: 1.3;
   padding: 0.4rem 0;
   transition: color 0.4s ease, text-shadow 0.4s ease;
 }
 
-/* ── Verdict states: each has a distinct 90s neon identity ── */
+/* ── HUGE STOKE — gold/yellow, highest luminance, pulses ── */
+#verdict-box.epic { border-color: var(--stoke); box-shadow: var(--glow-stoke); background: rgba(15,18,5,0.8); }
+#verdict-box.epic #verdict-text { color: var(--stoke); text-shadow: var(--glow-stoke); animation: verdictPulse 1.4s ease-in-out infinite; }
+#verdict-box.epic #stoke-bar    { color: var(--stoke); }
 
-/* HUGE STOKE — neon lime, energetic pulse */
-#verdict-box.epic {
-  border-color: var(--neon-green);
-  box-shadow: var(--glow-green), inset 0 0 40px rgba(0,255,140,0.07);
-  background: rgba(0, 20, 10, 0.75);
-}
-#verdict-box.epic #verdict-text {
-  color: var(--neon-green);
-  text-shadow: var(--glow-green);
-  animation: verdictPulse 1.4s ease-in-out infinite;
-}
-#verdict-box.epic #stoke-bar { color: var(--neon-green); text-shadow: var(--glow-green); }
+/* ── JL WOULD GO — sky blue ── */
+#verdict-box.good { border-color: var(--good); box-shadow: var(--glow-good); }
+#verdict-box.good #verdict-text { color: var(--good); text-shadow: var(--glow-good); animation: verdictPulse 2.5s ease-in-out infinite; }
+#verdict-box.good #stoke-bar    { color: var(--good); }
 
-/* WOULD GO — hot pink, steady glow */
-#verdict-box.good {
-  border-color: var(--primary);
-  box-shadow: var(--glow), inset 0 0 30px rgba(255,45,149,0.06);
-}
-#verdict-box.good #verdict-text {
-  color: var(--primary);
-  text-shadow: var(--glow);
-  animation: verdictPulse 2.5s ease-in-out infinite;
-}
-#verdict-box.good #stoke-bar { color: var(--primary); text-shadow: var(--glow-sm); }
+/* ── MAYBE — seafoam ── */
+#verdict-box.marginal { border-color: var(--maybe); box-shadow: var(--glow-maybe); }
+#verdict-box.marginal #verdict-text { color: var(--maybe); text-shadow: var(--glow-maybe); }
+#verdict-box.marginal #stoke-bar    { color: var(--maybe); }
 
-/* MAYBE — electric teal */
-#verdict-box.marginal {
-  border-color: var(--secondary);
-  box-shadow: var(--glow-teal);
-}
-#verdict-box.marginal #verdict-text {
-  color: var(--secondary);
-  text-shadow: var(--glow-teal);
-}
-#verdict-box.marginal #stoke-bar { color: var(--secondary); text-shadow: var(--glow-teal-sm); }
+/* ── TOO CHUNKY — warm amber ── */
+#verdict-box.chunky { border-color: var(--chunky); box-shadow: var(--glow-chunky); }
+#verdict-box.chunky #verdict-text { color: var(--chunky); text-shadow: var(--glow-chunky); }
+#verdict-box.chunky #stoke-bar    { color: var(--chunky); }
 
-/* TOO CHUNKY — neon orange, warning */
-#verdict-box.chunky {
-  border-color: var(--orange);
-  box-shadow: var(--glow-orange);
-}
-#verdict-box.chunky #verdict-text {
-  color: var(--orange);
-  text-shadow: var(--glow-orange);
-}
-#verdict-box.chunky #stoke-bar { color: var(--orange); }
+/* ── KINDA SCARY — burnt orange ── */
+#verdict-box.scary { border-color: var(--scary); box-shadow: var(--glow-scary); }
+#verdict-box.scary #verdict-text { color: var(--scary); text-shadow: var(--glow-scary); }
+#verdict-box.scary #stoke-bar    { color: var(--scary); }
 
-/* KINDA SCARY — hot red */
-#verdict-box.scary {
-  border-color: var(--red);
-  box-shadow: var(--glow-red);
-}
-#verdict-box.scary #verdict-text {
-  color: var(--red);
-  text-shadow: var(--glow-red);
-}
-#verdict-box.scary #stoke-bar { color: var(--red); }
+/* ── SWIM DAY — soft periwinkle, gentle pulse ── */
+#verdict-box.swim { border-color: var(--swim); box-shadow: var(--glow-swim); background: rgba(10,15,25,0.8); }
+#verdict-box.swim #verdict-text { color: var(--swim); text-shadow: var(--glow-swim); animation: verdictPulse 3s ease-in-out infinite; }
+#verdict-box.swim #stoke-bar    { color: var(--swim); }
 
-/* SWIM DAY — electric cyan, positive/chill */
-#verdict-box.swim {
-  border-color: var(--swim);
-  box-shadow: var(--glow-cyan), inset 0 0 30px rgba(0,229,255,0.04);
-}
-#verdict-box.swim #verdict-text {
-  color: var(--swim);
-  text-shadow: var(--glow-cyan);
-  animation: verdictPulse 3s ease-in-out infinite;
-}
-#verdict-box.swim #stoke-bar { color: var(--swim); text-shadow: var(--glow-cyan); }
-
-/* Loading */
+/* ── Loading ── */
 #verdict-box.verdict-loading { border-color: var(--dim); box-shadow: none; }
 #verdict-box.verdict-loading #verdict-text { color: var(--mid); text-shadow: none; }
 
 @keyframes verdictPulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.75; }
+  0%, 100% { opacity: 1;    }
+  50%       { opacity: 0.72; }
 }
 
 /* Stoke meter */
@@ -519,18 +342,8 @@ header {
   font-size: 1.2rem;
   color: var(--text);
 }
-
-.stoke-label {
-  color: var(--mid);
-  margin-right: 0.5rem;
-}
-
-#stoke-bar {
-  font-family: 'Courier New', monospace;
-  /* color set per verdict state above */
-  letter-spacing: 0;
-  transition: color 0.4s ease;
-}
+.stoke-label { color: var(--mid); margin-right: 0.5rem; }
+#stoke-bar   { font-family: 'Courier New', monospace; letter-spacing: 0; transition: color 0.4s ease; }
 
 /* Verdict reasons */
 #verdict-reasons {
@@ -540,17 +353,12 @@ header {
   font-family: 'VT323', monospace;
   letter-spacing: 0.05em;
 }
-
-#verdict-reasons .reason-item {
-  display: inline-block;
-  margin: 0 0.4rem;
-}
-
-#verdict-reasons .reason-good    { color: var(--neon-green); }
-#verdict-reasons .reason-bad     { color: var(--red); }
-#verdict-reasons .reason-neutral { color: var(--secondary); }
-#verdict-reasons .reason-warn    { color: var(--orange); }
-#verdict-reasons .reason-swim    { color: var(--swim); }
+#verdict-reasons .reason-item   { display: inline-block; margin: 0 0.4rem; }
+#verdict-reasons .reason-good   { color: var(--good);   }
+#verdict-reasons .reason-bad    { color: var(--scary);  }
+#verdict-reasons .reason-neutral{ color: var(--maybe);  }
+#verdict-reasons .reason-warn   { color: var(--chunky); }
+#verdict-reasons .reason-swim   { color: var(--swim);   }
 
 /* ─── Section Headers ────────────────────────────────────────────────────────── */
 .section-header {
@@ -568,16 +376,12 @@ header {
   margin: 0.75rem 0;
   padding: 0.75rem;
   border: 1px solid var(--dim);
-  background: rgba(8, 6, 15, 0.5);
+  background: rgba(11,22,34,0.5);
   overflow-x: auto;
 }
 
-#forecast-spot-name {
-  color: var(--primary);
-  text-shadow: var(--glow-sm);
-}
+#forecast-spot-name { color: var(--primary); text-shadow: var(--glow-sm); }
 
-/* ASCII forecast table */
 .forecast-table {
   font-family: 'Courier New', monospace;
   font-size: clamp(0.6rem, 1.1vw, 0.85rem);
@@ -590,30 +394,27 @@ header {
 }
 
 .forecast-table .tbl-border  { color: var(--dim); }
-.forecast-table .tbl-header  { color: var(--secondary); }
+.forecast-table .tbl-header  { color: var(--mid); }
 .forecast-table .tbl-data    { color: var(--text); }
-.forecast-table .tbl-good    { color: var(--neon-green); text-shadow: 0 0 4px rgba(0,255,140,0.5); }
-.forecast-table .tbl-amber   { color: var(--orange); }
-.forecast-table .tbl-poor    { color: var(--red); }
-.forecast-table .tbl-swim    { color: var(--swim); }
-.forecast-table .tbl-current { background: rgba(255,45,149,0.06); }
+.forecast-table .tbl-good    { color: var(--good);   text-shadow: 0 0 4px rgba(91,155,213,0.4); }
+.forecast-table .tbl-amber   { color: var(--chunky); }
+.forecast-table .tbl-poor    { color: var(--scary);  }
+.forecast-table .tbl-swim    { color: var(--swim);   }
+.forecast-table .tbl-current { background: rgba(91,155,213,0.07); }
 
-.forecast-table .star-filled { color: var(--neon-yellow); text-shadow: 0 0 4px rgba(245,255,0,0.5); }
-.forecast-table .star-empty  { color: var(--dim); }
+/* Stars: amber/gold (colorblind-safe; not green) */
+.forecast-table .star-filled { color: var(--stoke); }
+.forecast-table .star-empty  { color: var(--dim);   }
 
 /* ─── Buoy Panel ─────────────────────────────────────────────────────────────── */
 #buoy-panel {
   margin: 0.75rem 0;
   padding: 0.75rem;
   border: 1px solid var(--dim);
-  background: rgba(8, 6, 15, 0.5);
+  background: rgba(11,22,34,0.5);
 }
 
-#buoy-data-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
-}
+#buoy-data-wrap { display: flex; flex-wrap: wrap; gap: 0.75rem; }
 
 .buoy-card {
   font-family: 'Courier New', monospace;
@@ -624,11 +425,11 @@ header {
   flex: 1 1 300px;
 }
 
-.buoy-card .buoy-border  { color: var(--wave-dim); }
-.buoy-card .buoy-title   { color: var(--swim); text-shadow: 0 0 4px rgba(0,229,255,0.5); }
-.buoy-card .buoy-label   { color: var(--mid); }
-.buoy-card .buoy-value   { color: var(--secondary); }
-.buoy-card .buoy-missing { color: var(--dim); }
+.buoy-card .buoy-border { color: var(--wave-dim); }
+.buoy-card .buoy-title  { color: var(--swim); text-shadow: 0 0 4px rgba(144,202,249,0.4); }
+.buoy-card .buoy-label  { color: var(--mid); }
+.buoy-card .buoy-value  { color: var(--bright); }
+.buoy-card .buoy-missing{ color: var(--dim); }
 
 /* ─── Terminal Messages ──────────────────────────────────────────────────────── */
 .terminal-msg {
@@ -642,28 +443,22 @@ header {
 .error-box {
   font-family: 'Courier New', monospace;
   font-size: 0.85rem;
-  color: var(--orange);
-  border: 1px solid rgba(255,124,0,0.3);
+  color: var(--chunky);
+  border: 1px solid rgba(200,134,10,0.3);
   padding: 0.5rem 0.75rem;
   margin: 0.4rem 0;
 }
-
-.error-box .err-border { color: rgba(255,124,0,0.4); }
-.error-box .err-text   { color: var(--orange); }
+.error-box .err-border { color: rgba(200,134,10,0.35); }
+.error-box .err-text   { color: var(--chunky); }
 
 /* ─── Loading Bar ────────────────────────────────────────────────────────────── */
-#loading-bar-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  margin-bottom: 0.3rem;
-}
+#loading-bar-wrap { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; }
 
 #loading-bar {
   flex: 1;
   height: 4px;
   background: var(--dim);
-  border: 1px solid rgba(255,45,149,0.15);
+  border: 1px solid rgba(91,155,213,0.12);
   overflow: hidden;
 }
 
@@ -675,12 +470,10 @@ header {
   transition: width 0.3s ease;
 }
 
-#loading-fill.loading-pulse {
-  animation: loadingPulse 1.2s ease-in-out infinite;
-}
+#loading-fill.loading-pulse { animation: loadingPulse 1.2s ease-in-out infinite; }
 
 @keyframes loadingPulse {
-  0%, 100% { width: 20%; margin-left: 0; }
+  0%, 100% { width: 20%; margin-left: 0;   }
   50%       { width: 20%; margin-left: 80%; }
 }
 
@@ -701,101 +494,41 @@ footer {
   font-size: 0.9rem;
 }
 
-#status-line {
-  color: var(--mid);
-  letter-spacing: 0.06em;
-  margin-top: 0.25rem;
-}
+#status-line  { color: var(--mid); letter-spacing: 0.06em; margin-top: 0.25rem; }
+#last-updated { color: var(--primary); }
 
-#last-updated {
-  color: var(--primary);
-}
+.refresh-link { color: var(--mid); cursor: pointer; transition: color 0.15s; }
+.refresh-link:hover { color: var(--primary); text-shadow: var(--glow-sm); }
 
-.refresh-link {
-  color: var(--mid);
-  cursor: pointer;
-  transition: color 0.15s;
-}
-.refresh-link:hover {
-  color: var(--primary);
-  text-shadow: var(--glow-sm);
-}
-
-#coord-line {
-  color: var(--dim);
-  font-size: 0.8rem;
-  margin-top: 0.2rem;
-}
+#coord-line { color: var(--dim); font-size: 0.8rem; margin-top: 0.2rem; }
 
 /* ─── Utility ────────────────────────────────────────────────────────────────── */
-.hidden { display: none !important; }
-
-.txt-primary { color: var(--primary); }
-.txt-amber   { color: var(--amber);   }
-.txt-red     { color: var(--red);     }
-.txt-dim     { color: var(--dim);     }
-.txt-wave    { color: var(--wave);    }
+.hidden     { display: none !important; }
+.txt-primary{ color: var(--primary); }
+.txt-stoke  { color: var(--stoke);   }
+.txt-good   { color: var(--good);    }
+.txt-chunky { color: var(--chunky);  }
+.txt-scary  { color: var(--scary);   }
+.txt-swim   { color: var(--swim);    }
+.txt-dim    { color: var(--dim);     }
 
 /* ─── Responsive ─────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
-  .terminal-container {
-    padding: 0.5rem 0.75rem 1.5rem;
-  }
-
-  #ascii-logo {
-    font-size: 0.28rem;
-  }
-
-  #system-status {
-    font-size: 0.85rem;
-  }
-
-  /* Hide wave animation on small screens to save space */
-  #surf-animation {
-    height: 60px;
-  }
-
-  .surfer-art {
-    font-size: 0.6rem;
-  }
-
-  .surfer-wrapper {
-    top: -26px;
-  }
-
-  #verdict-text {
-    font-size: 1rem;
-  }
-
-  .forecast-table {
-    font-size: 0.55rem;
-  }
-
-  .buoy-card {
-    font-size: 0.6rem;
-    flex: 1 1 100%;
-  }
-
-  #controls {
-    flex-direction: column;
-    gap: 0.75rem;
-  }
-
+  .terminal-container { padding: 0.5rem 0.75rem 1.5rem; }
+  #ascii-logo         { font-size: 0.28rem; }
+  #system-status      { font-size: 0.85rem; }
+  #surf-animation     { height: 100px; }
+  #verdict-text       { font-size: 1rem; }
+  .forecast-table     { font-size: 0.55rem; }
+  .buoy-card          { font-size: 0.6rem; flex: 1 1 100%; }
+  #controls           { flex-direction: column; gap: 0.75rem; }
   #spot-selector-wrap,
-  #date-nav {
-    flex: 1 1 100%;
-  }
-
-  .spot-btn {
-    font-size: 0.85rem;
-    padding: 0.15rem 0.5rem;
-  }
+  #date-nav           { flex: 1 1 100%; }
+  .spot-btn           { font-size: 0.85rem; padding: 0.15rem 0.5rem; }
 }
 
 @media (max-width: 480px) {
-  #ascii-logo {
-    display: none; /* Too small to render well on tiny screens */
-  }
+  #ascii-logo { display: none; }
 
   header::before {
     content: '[ JL WOULD GO ]';
@@ -803,16 +536,10 @@ footer {
     font-family: 'Press Start 2P', monospace;
     font-size: 0.8rem;
     color: var(--primary);
-    text-shadow: var(--glow);
+    text-shadow: var(--glow-sm);
     text-align: center;
     padding: 0.5rem 0;
   }
 
-  #surf-animation {
-    height: 50px;
-  }
-
-  .surfer-wrapper {
-    display: none;
-  }
+  #surf-animation { height: 80px; }
 }

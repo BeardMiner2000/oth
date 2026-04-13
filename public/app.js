@@ -766,35 +766,208 @@ function updateTimestamp() {
   });
 }
 
-// ─── Surfer Animation ─────────────────────────────────────────────────────────
-/**
- * Gently oscillate the surfer's horizontal position in sync with the wave
- * scroll animation (5s period). Uses requestAnimationFrame for smoothness.
- */
-function startSurferAnimation() {
-  const surferWrapper = document.querySelector('.surfer-wrapper');
-  if (!surferWrapper) return;
+// ─── NES Canvas Animation ─────────────────────────────────────────────────────
+//
+// Pixel-art longboarder cruising in the pocket of a slow, clean wave.
+// NES-style: 4px per logical pixel, flat colors, crisp edges, ~3fps sprite.
+// Beach palette — colorblind friendly (no red/green reliance).
 
-  const WAVE_PERIOD_MS = 5000;    // matches CSS animation
-  const DRIFT_AMOUNT   = 6;       // pixels of horizontal sway
-  const BASE_LEFT_PCT  = 12;      // base % from left
+const NES = {
+  PX:   4,     // logical pixel → screen pixel scale
+  FPS:  3,     // sprite animation frames per second (slow, lazy NES feel)
+};
 
-  let start = null;
+// ── Color palette (12 colors max, like an NES background palette) ──
+const C = {
+  sky1:   '#a8d4ee',  // pale sky
+  sky2:   '#c8e6f8',  // lighter sky horizon
+  horiz:  '#5a9ec8',  // horizon line
+  far:    '#2e78b0',  // far ocean
+  mid:    '#1e5a90',  // mid-distance ocean
+  face:   '#1a4878',  // wave face (steep blue wall)
+  deep:   '#0e2e50',  // deep/trough water
+  crest:  '#6ab4dc',  // wave crest, lighter
+  foam1:  '#b8daf2',  // foam light
+  foam2:  '#e8f4fc',  // foam bright
+  ww:     '#82b8d8',  // whitewater behind break
+  // surfer
+  hair:   '#2c1a10',
+  skin:   '#e8b468',  // warm golden skin
+  suit:   '#1e4880',  // wetsuit ocean blue
+  suitD:  '#142e58',  // dark wetsuit shadow
+  board:  '#e8cc3a',  // yellow longboard
+  boardD: '#b89820',  // board rail
+  wax:    '#f0ead8',  // deck wax / feet
+};
 
-  function frame(ts) {
-    if (!start) start = ts;
-    const elapsed = ts - start;
+// ── Surfer sprite: 2 frames, 10×12 logical pixels ──
+// Each row = array of color keys (null = transparent)
+const FRAMES = [
+  // Frame 0 — arms wide, classic trim pose
+  [
+    [null,null,'hair','hair','hair',null,null,null,null,null],
+    [null,'hair','skin','skin','skin','hair',null,null,null,null],
+    [null,null,'skin','skin','suitD',null,null,null,null,null],
+    [null,'suitD','suit','suit','suit','suitD',null,null,null,null],
+    ['skin','suit','suit','suit','suit','suit','skin',null,null,null],
+    [null,null,'suit','suit','suit','suit',null,null,null,null],
+    [null,null,'suit','suit','suit',null,null,null,null,null],
+    [null,'suitD','suit',null,'suit','suitD',null,null,null,null],
+    [null,'suit','suit',null,'suit','suit',null,null,null,null],
+    [null,'wax','wax',null,'wax','wax',null,null,null,null],
+    ['boardD','board','board','board','board','board','board','board','board','boardD'],
+    [null,'boardD','board','board','board','board','board','board','boardD',null],
+  ],
+  // Frame 1 — slight weight shift forward, still cruising
+  [
+    [null,null,null,'hair','hair','hair',null,null,null,null],
+    [null,null,'hair','skin','skin','skin','hair',null,null,null],
+    [null,null,'skin','skin','skin','suitD',null,null,null,null],
+    [null,null,'suitD','suit','suit','suit','suitD',null,null,null],
+    ['skin',null,'suit','suit','suit','suit',null,'skin',null,null],
+    [null,null,null,'suit','suit','suit','suit',null,null,null],
+    [null,null,null,'suit','suit','suit',null,null,null,null],
+    [null,null,'suitD','suit',null,'suit',null,null,null,null],
+    [null,null,'suit','suit',null,'suit','suit',null,null,null],
+    [null,null,'wax','wax',null,'wax','wax',null,null,null],
+    ['boardD','board','board','board','board','board','board','board','board','boardD'],
+    [null,'boardD','board','board','board','board','board','board','boardD',null],
+  ],
+];
 
-    // Gentle sine wave horizontal drift following wave
-    const phase   = (elapsed % WAVE_PERIOD_MS) / WAVE_PERIOD_MS;
-    const driftX  = Math.sin(phase * 2 * Math.PI) * DRIFT_AMOUNT;
+const SPRITE_W = 10;   // logical pixels
+const SPRITE_H = 12;
 
-    surferWrapper.style.left = `calc(${BASE_LEFT_PCT}% + ${driftX}px)`;
+function drawSprite(ctx, frame, x, y) {
+  const rows = FRAMES[frame % FRAMES.length];
+  rows.forEach((row, ry) => {
+    row.forEach((key, rx) => {
+      if (!key || !C[key]) return;
+      ctx.fillStyle = C[key];
+      ctx.fillRect(
+        Math.floor(x + rx * NES.PX),
+        Math.floor(y + ry * NES.PX),
+        NES.PX, NES.PX
+      );
+    });
+  });
+}
 
-    requestAnimationFrame(frame);
+function drawScene(canvas, t) {
+  const ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  const W  = canvas.width;
+  const H  = canvas.height;
+  const PX = NES.PX;
+
+  // Logical grid size
+  const NW = Math.ceil(W / PX);
+  const NH = Math.ceil(H / PX);
+
+  // Wave scrolls slowly left — longboard wave speed
+  const scrollPx = (t * 0.018) % 1; // 0–1 fractional scroll per cycle
+  const scrollN  = Math.floor(scrollPx * NW);
+
+  // ── Sky ──────────────────────────────────────────────────────────────────
+  for (let y = 0; y < 5; y++) {
+    ctx.fillStyle = y < 3 ? C.sky2 : C.sky1;
+    ctx.fillRect(0, y * PX, W, PX);
+  }
+  // Horizon strip
+  ctx.fillStyle = C.horiz;
+  ctx.fillRect(0, 5 * PX, W, PX);
+  // Far ocean
+  for (let y = 6; y < 9; y++) {
+    ctx.fillStyle = y < 8 ? C.far : C.mid;
+    ctx.fillRect(0, y * PX, W, PX);
   }
 
-  requestAnimationFrame(frame);
+  // ── Wave ─────────────────────────────────────────────────────────────────
+  // For each column, compute where the wave surface is (logical Y).
+  // Two sine waves at different frequencies give a realistic rolling swell.
+  for (let nx = 0; nx < NW; nx++) {
+    const phase = ((nx + scrollN) % NW) / NW; // 0–1
+    const θ = phase * Math.PI * 2;
+
+    // Crest height: primary swell + secondary ripple
+    const crestNY = 9
+      + Math.floor(Math.sin(θ * 1.0) * 2.2)
+      + Math.floor(Math.sin(θ * 2.3 + 0.8) * 0.9);
+
+    const x = nx * PX;
+
+    // Foam at crest (2 px tall)
+    ctx.fillStyle = C.foam2;
+    ctx.fillRect(x, crestNY * PX, PX, PX);
+    ctx.fillStyle = C.foam1;
+    ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
+
+    // Wave face below crest — color darkens with depth
+    for (let ny = crestNY + 2; ny < NH; ny++) {
+      const depth = ny - crestNY;
+      let col;
+      if (depth < 3)       col = C.crest;
+      else if (depth < 7)  col = C.mid;
+      else if (depth < 13) col = C.face;
+      else                 col = C.deep;
+      ctx.fillStyle = col;
+      ctx.fillRect(x, ny * PX, PX, PX);
+    }
+
+    // Whitewater scatter just behind the break (right 35% of screen)
+    if (nx > NW * 0.62) {
+      const wwPhase = ((nx - Math.floor(NW * 0.62) + scrollN * 2) % NW) / NW;
+      if (Math.sin(wwPhase * Math.PI * 8) > 0.5) {
+        ctx.fillStyle = C.ww;
+        ctx.fillRect(x, (crestNY + 1) * PX, PX, PX * 2);
+      }
+    }
+  }
+
+  // ── Surfer — locked in the pocket at ~30% from left ──────────────────────
+  const surferNX = Math.floor(NW * 0.30);
+  const surferPhase = ((surferNX + scrollN) % NW) / NW;
+  const surferTheta = surferPhase * Math.PI * 2;
+  const surfaceNY = 9
+    + Math.floor(Math.sin(surferTheta * 1.0) * 2.2)
+    + Math.floor(Math.sin(surferTheta * 2.3 + 0.8) * 0.9);
+
+  // Position sprite so board bottom sits on wave surface
+  const spriteX = surferNX * PX - Math.floor((SPRITE_W * PX) / 2);
+  const spriteY = (surfaceNY + 1) * PX - SPRITE_H * PX;
+
+  // Slight board tilt — rotate around the board's center
+  const tiltAngle = (Math.sin(surferTheta * 1.0) * 2.2 - Math.sin((surferTheta + 0.1) * 1.0) * 2.2) * 0.04;
+  const pivotX = spriteX + (SPRITE_W * PX) / 2;
+  const pivotY = spriteY + SPRITE_H * PX;
+
+  ctx.save();
+  ctx.translate(pivotX, pivotY);
+  ctx.rotate(tiltAngle);
+  ctx.translate(-pivotX, -pivotY);
+  const frame = Math.floor(t / (1000 / NES.FPS)) % FRAMES.length;
+  drawSprite(ctx, frame, spriteX, spriteY);
+  ctx.restore();
+}
+
+function startSurferAnimation() {
+  const canvas = document.getElementById('surf-canvas');
+  if (!canvas) return;
+
+  // Size canvas to match its CSS-rendered dimensions
+  function resize() {
+    canvas.width  = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+
+  function loop(ts) {
+    drawScene(canvas, ts);
+    requestAnimationFrame(loop);
+  }
+  requestAnimationFrame(loop);
 }
 
 // ─── Format Helpers ───────────────────────────────────────────────────────────
