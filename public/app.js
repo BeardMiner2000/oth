@@ -108,13 +108,16 @@ function render() {
   if (nameEl) nameEl.textContent = spotName.toUpperCase();
 
   // Normalize data sources once
-  const surflineData   = state.forecastData.surfline || [];
-  const openMeteoNorm  = normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
-  const useSurfline    = surflineData.length > 0;
+  const surflineData      = state.forecastData.surfline || [];
+  const stormglassNorm    = normalizeStormglassForTable(state.forecastData.stormglass || []);
+  const openMeteoNorm     = normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
+  const useStormglass     = stormglassNorm.length > 0;
+  const useOpenMeteo      = openMeteoNorm.length > 0;
 
-  // Table: prefer Surfline granularity, fall back to Open-Meteo (not SF.com — too coarse)
-  const tableData      = useSurfline ? surflineData : openMeteoNorm;
-  const verdictSource  = useSurfline ? 'surfline' : (tableData.length ? 'open-meteo' : 'buoy');
+  // Table: Stormglass (primary) → Open-Meteo (fallback)
+  // Surfline would be primary but it's blocked on production
+  const tableData      = useStormglass ? stormglassNorm : openMeteoNorm;
+  const verdictSource  = useStormglass ? 'stormglass' : (useOpenMeteo ? 'open-meteo' : 'buoy');
 
   // Verdict uses the selected day's slice
   const dayData       = getDaySlice(tableData, state.currentDay);
@@ -129,15 +132,44 @@ function render() {
   // Forecast table
   renderForecastTable(tableData, state.forecastData.tides, state.forecastData.conditions);
 
-  // surf-forecast.com cross-reference panel (always show when available)
-  renderSurfForecastSection(state.forecastData.surfForecast);
-
   // Buoy panel
   renderBuoyPanel(state.buoyData);
 
   // Update timestamp
   updateTimestamp();
   updateDayDisplay();
+}
+
+// ─── Stormglass → Surfline-shape normalizer (primary forecast source) ─────────
+function normalizeStormglassForTable(intervals) {
+  const nowTs = Math.floor(Date.now() / 1000);
+  // Stormglass is hourly; sample every 3 hours, drop past intervals
+  return intervals
+    .filter((e, i) => i % 3 === 0 && e.timestamp >= nowTs - 3600)
+    .map(e => ({
+      timestamp: e.timestamp,
+      surf: {
+        // Stormglass aggregates multiple meteorological sources (NOAA, ECMWF, etc).
+        // Data is already fairly accurate for peak/average wave height at Bolinas.
+        // Apply modest calibration: ~85-95% of reported Hs for local surf height.
+        min: e.waveHeightFt ? Math.max(0.5, Math.round((e.waveHeightFt * 0.85) * 2) / 2) : 0,
+        max: e.waveHeightFt ? Math.max(1.0, Math.round((e.waveHeightFt * 0.95) * 2) / 2) : 0
+      },
+      swells: e.waveHeightFt ? [{
+        height:    e.waveHeightFt,
+        // Stormglass wavePeriod (~10s) is better than Open-Meteo (~9s), closer to Surfline
+        period:    e.wavePeriod || 0,
+        direction: e.waveDirection || 0,
+        optimalScore: 0
+      }] : [],
+      wind: e.windSpeedKts != null ? {
+        speed:         e.windSpeedKts,
+        direction:     e.windDirectionDeg || 0,
+        directionType: '',
+        gust:          e.windGustKts || 0
+      } : null,
+      tide: null
+    }));
 }
 
 // ─── Open-Meteo → Surfline-shape normalizer (fallback for forecast table) ─────
@@ -150,7 +182,7 @@ function normalizeOpenMeteoForTable(intervals) {
       timestamp: e.timestamp,
       surf: {
         // Open-Meteo wave_height is significant wave height (open ocean).
-        // Bolinas sees ~35% of Hs due to Point Reyes shadow + headland refraction.
+        // Bolinas sees ~30-40% of Hs due to Point Reyes shadow + headland refraction.
         min: e.waveHeightFt ? Math.max(0.5, Math.round((e.waveHeightFt * 0.30) * 2) / 2) : 0,
         max: e.waveHeightFt ? Math.max(1.0, Math.round((e.waveHeightFt * 0.40) * 2) / 2) : 0
       },
@@ -496,7 +528,7 @@ function renderVerdictPanel(verdict) {
 
   // Reasons + data source tag
   if (reasonEl) {
-    const srcMap = { surfline: 'SURFLINE', 'surf-forecast': 'SURF-FORECAST.COM', 'open-meteo': 'OPEN-METEO', buoy: 'NOAA BUOY (FALLBACK)' };
+    const srcMap = { surfline: 'SURFLINE', stormglass: 'STORMGLASS', 'open-meteo': 'OPEN-METEO', 'surf-forecast': 'SURF-FORECAST.COM', buoy: 'NOAA BUOY (FALLBACK)' };
     const srcTag = verdict.source ? `<span class="reason-item reason-neutral">[ SRC: ${srcMap[verdict.source] || verdict.source} ]</span>` : '';
     reasonEl.innerHTML = (verdict.reasons
       ? verdict.reasons.map(r => `<span class="reason-item ${r.cls}">[ ${r.text} ]</span>`).join(' ')
@@ -522,91 +554,6 @@ function buildStokeMeter(score) {
   return `[ ${bar} ] ${score}%`;
 }
 
-// ─── Render: Surf-Forecast.com Section (The Patch daily tide summary) ────────
-function renderSurfForecastSection(sfData) {
-  const wrap = document.getElementById('sf-wrap');
-  if (!wrap) return;
-
-  if (!sfData || !sfData.individual || sfData.individual.length === 0 || sfData.error) {
-    wrap.innerHTML = '';
-    return;
-  }
-
-  // Use The Patch data (first individual break)
-  const patchData = sfData.individual[0]?.data || [];
-  if (!patchData || patchData.length === 0) {
-    wrap.innerHTML = '';
-    return;
-  }
-
-  // Helper: find interval closest to a time slot
-  function findIntervalForTide(intervals, tideTime) {
-    if (!tideTime || !intervals.length) return null;
-    const hour = parseInt(tideTime.match(/\d+/)?.[0] || 0);
-    let closest = intervals[0];
-    let minDiff = Infinity;
-    intervals.forEach(i => {
-      const slotHour = i.timeSlot === 'AM' ? 6 : i.timeSlot === 'PM' ? 14 : 22;
-      const diff = Math.abs(slotHour - hour);
-      if (diff < minDiff) {
-        minDiff = diff;
-        closest = i;
-      }
-    });
-    return closest;
-  }
-
-  // Group by day
-  const byDay = {};
-  patchData.forEach(interval => {
-    const day = interval.dayLabel || 'Unknown';
-    if (!byDay[day]) byDay[day] = [];
-    byDay[day].push(interval);
-  });
-
-  let html = `<div class="section-header" style="margin-top:1rem">▶ SURF-FORECAST.COM "THE PATCH" — TIDE TIMES</div>`;
-  html += `<pre class="forecast-table">`;
-
-  Object.entries(byDay).forEach(([dayLabel, intervals]) => {
-    // Collect all unique tide times from all intervals that day
-    const allLowTides = new Set();
-    const allHighTides = new Set();
-    intervals.forEach(i => {
-      // Handle both single time (old format) and array of times (new format)
-      const lowTimes = Array.isArray(i.lowTideTimes) ? i.lowTideTimes : (i.lowTideTime ? [i.lowTideTime] : []);
-      const highTimes = Array.isArray(i.highTideTimes) ? i.highTideTimes : (i.highTideTime ? [i.highTideTime] : []);
-      lowTimes.forEach(t => { if (t && t !== '---') allLowTides.add(t); });
-      highTimes.forEach(t => { if (t && t !== '---') allHighTides.add(t); });
-    });
-
-    const lowTimes = Array.from(allLowTides).sort();
-    const highTimes = Array.from(allHighTides).sort();
-
-    // Format each tide
-    function formatTide(tideTime) {
-      const interval = findIntervalForTide(intervals, tideTime);
-      if (!interval) return `${tideTime} --- ☆☆☆`;
-      const energy = interval.energyKj ? `${Math.round(interval.energyKj/100)}00kJ` : '---';
-      const stoke = Math.round((interval.rating10 || 0) / 2);
-      const stars = '★'.repeat(stoke) + '☆'.repeat(5 - stoke);
-      return `${tideTime.padEnd(8)} ${energy.padEnd(6)} ${stars}`;
-    }
-
-    const tideLines = [];
-    lowTimes.forEach(t => {
-      tideLines.push(`L ${formatTide(t)}`);
-    });
-    highTimes.forEach(t => {
-      tideLines.push(`H ${formatTide(t)}`);
-    });
-    const tideLine = tideLines.join('  |  ');
-
-    html += `<span class="tbl-data">  ${dayLabel.padEnd(11)} ${tideLine}\n</span>`;
-  });
-
-  html += `</pre>`;
-  wrap.innerHTML = html;
-}
 
 // ─── Render: Forecast Table ───────────────────────────────────────────────────
 function renderForecastTable(intervals, tides, conditions) {

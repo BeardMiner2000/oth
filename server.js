@@ -11,10 +11,20 @@ const surfline    = require('./scrapers/surfline');
 const noaa        = require('./scrapers/noaa');
 const surfForecast = require('./scrapers/surfForecast');
 const openMeteo   = require('./scrapers/openMeteo');
+const stormglass  = require('./scrapers/stormglass');
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 const forecastCache = new NodeCache({ stdTTL: 30 * 60, checkperiod: 5 * 60 });
 const buoyCache     = new NodeCache({ stdTTL: 15 * 60, checkperiod: 3 * 60 });
+
+// ─── Stormglass Rate Limiter (10 calls/day free tier) ────────────────────────
+let stormglassCallCount = 0;
+const STORMGLASS_DAILY_LIMIT = 10;
+const STORMGLASS_RESET_INTERVAL = 24 * 60 * 60 * 1000; // 24 hours
+setInterval(() => {
+  stormglassCallCount = 0;
+  console.log('[STORMGLASS] Daily rate limit reset');
+}, STORMGLASS_RESET_INTERVAL);
 
 // ─── App ──────────────────────────────────────────────────────────────────────
 const app  = express();
@@ -80,13 +90,23 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
   }
 
   try {
-    // Fetch Surfline + Open-Meteo + NOAA tides in parallel; tolerate partial failures
-    const [waveResult, windResult, tideResult, condResult, meteoResult, noaaTideResult] = await Promise.allSettled([
+    // Stormglass rate limiting: 10 calls/day free tier
+    const canCallStormglass = stormglassCallCount < STORMGLASS_DAILY_LIMIT;
+    if (canCallStormglass && process.env.STORMGLASS_API_KEY) {
+      stormglassCallCount++;
+      console.log(`[STORMGLASS] Call ${stormglassCallCount}/${STORMGLASS_DAILY_LIMIT}`);
+    }
+
+    // Fetch Surfline + Open-Meteo + Stormglass + NOAA tides in parallel; tolerate partial failures
+    const [waveResult, windResult, tideResult, condResult, meteoResult, stormglassResult, noaaTideResult] = await Promise.allSettled([
       surfline.getWaveForecast(spotMeta.id),
       surfline.getWindForecast(spotMeta.id),
       surfline.getTideForecast(spotMeta.id),
       surfline.getConditions(spotMeta.id),
       openMeteo.getMarineForecast(spotMeta.lat, spotMeta.lon),
+      canCallStormglass && process.env.STORMGLASS_API_KEY
+        ? stormglass.getMarineForecast(spotMeta.lat, spotMeta.lon, process.env.STORMGLASS_API_KEY)
+        : Promise.resolve([]),  // Skip Stormglass if rate limit hit; fall back to Open-Meteo
       noaa.getTidePredictions('9414958')   // Bolinas tide gauge — fallback when Surfline blocked
     ]);
 
@@ -97,6 +117,7 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
     const tides      = sfTides.length > 0 ? sfTides : noaaTides;   // prefer Surfline tides
     const conds      = condResult.status  === 'fulfilled' ? condResult.value      : [];
     const meteo      = meteoResult.status === 'fulfilled' ? meteoResult.value     : [];
+    const stormglassData = stormglassResult.status === 'fulfilled' ? stormglassResult.value : [];
 
     // Merge wave + wind by timestamp
     const merged = mergeWaveWind(waves, winds).map(entry => ({
@@ -141,6 +162,7 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       tides,
       conditions:     conds,
       openMeteo:      meteo,
+      stormglass:     stormglassData,
       surfForecast:   sfData,
       fetchedAt:      new Date().toISOString(),
       cached:         false,
@@ -149,7 +171,8 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
         wind:  windResult.status  === 'rejected' ? windResult.reason?.message  : null,
         tide:  tideResult.status  === 'rejected' ? tideResult.reason?.message  : null,
         cond:  condResult.status  === 'rejected' ? condResult.reason?.message  : null,
-        meteo: meteoResult.status === 'rejected' ? meteoResult.reason?.message : null
+        meteo: meteoResult.status === 'rejected' ? meteoResult.reason?.message : null,
+        stormglass: stormglassResult.status === 'rejected' ? stormglassResult.reason?.message : null
       }
     };
 
