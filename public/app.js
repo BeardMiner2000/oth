@@ -71,6 +71,15 @@ async function loadForecast(spotId) {
     state.buoyData     = buoys;
     state.lastUpdated  = new Date();
 
+    // Log any server-side fetch errors for debugging
+    if (forecast.errors) {
+      const errs = Object.entries(forecast.errors).filter(([, v]) => v);
+      if (errs.length) console.warn('[OTH] Server fetch errors:', Object.fromEntries(errs));
+    }
+    if (forecast.surfline && forecast.surfline.length === 0) {
+      console.warn('[OTH] Surfline returned 0 intervals — error:', forecast.errors?.wave);
+    }
+
     render();
   } catch (e) {
     renderError(e.message);
@@ -113,8 +122,13 @@ function render() {
   const verdict = calculateVerdict(verdictInput);
   renderVerdictPanel(verdict);
 
-  // Forecast table
-  renderForecastTable(state.forecastData.surfline, state.forecastData.tides);
+  // Forecast table — prefer Surfline, fall back to normalized Open-Meteo
+  const surflineIntervals = state.forecastData.surfline || [];
+  const tableIntervals = surflineIntervals.length > 0
+    ? surflineIntervals
+    : normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
+  const tableSource = surflineIntervals.length > 0 ? 'surfline' : 'open-meteo';
+  renderForecastTable(tableIntervals, state.forecastData.tides, tableSource);
 
   // Buoy panel
   renderBuoyPanel(state.buoyData);
@@ -122,6 +136,29 @@ function render() {
   // Update timestamp
   updateTimestamp();
   updateDayDisplay();
+}
+
+// ─── Open-Meteo → Surfline-shape normalizer (fallback for forecast table) ─────
+function normalizeOpenMeteoForTable(intervals) {
+  // Open-Meteo is hourly; sample every 3 hours to match Surfline cadence
+  return intervals
+    .filter((_, i) => i % 3 === 0)
+    .map(e => ({
+      timestamp: e.timestamp,
+      surf: {
+        // Open-Meteo significant wave height ≈ rough surf height for NorCal
+        min: e.waveHeightFt ? Math.max(0, Math.round((e.waveHeightFt * 0.8) * 2) / 2) : 0,
+        max: e.waveHeightFt ? Math.round((e.waveHeightFt * 1.1) * 2) / 2            : 0
+      },
+      swells: e.swellHeightFt ? [{
+        height:    e.swellHeightFt,
+        period:    e.swellPeriod    || 0,
+        direction: e.swellDirection || 0,
+        optimalScore: 0
+      }] : [],
+      wind: null,
+      tide: null
+    }));
 }
 
 // ─── Data Helpers ─────────────────────────────────────────────────────────────
@@ -419,12 +456,12 @@ function buildStokeMeter(score) {
 }
 
 // ─── Render: Forecast Table ───────────────────────────────────────────────────
-function renderForecastTable(intervals, tides) {
+function renderForecastTable(intervals, tides, source) {
   const wrap = document.getElementById('forecast-table-wrap');
   if (!wrap) return;
 
   if (!intervals || intervals.length === 0) {
-    wrap.innerHTML = buildErrorBox('NO SURFLINE DATA AVAILABLE');
+    wrap.innerHTML = buildErrorBox('NO FORECAST DATA AVAILABLE');
     return;
   }
 
@@ -511,9 +548,14 @@ function renderForecastTable(intervals, tides) {
 
   const header = `║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║`;
 
+  const srcLabel = source === 'open-meteo' ? ' // SRC: OPEN-METEO (SURFLINE UNAVAILABLE)' : '';
   let html = `<pre class="forecast-table">`;
   html += `<span class="tbl-border">${escHtml(TOP)}\n`;
-  html += `</span><span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║\n</span>`;
+  if (srcLabel) {
+    html += `</span><span class="tbl-amber">║  ${pad(srcLabel.trim(), totalW - 2)}║\n</span>`;
+    html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
+  }
+  html += `<span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║\n</span>`;
   html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
 
   rows.forEach(row => {
