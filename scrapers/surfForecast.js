@@ -10,7 +10,9 @@ const SURF_FORECAST_SLUGS = {
   stinson:      'Stinson-Beach',
   oceanBeachSF: 'Ocean-Beach-San-Francisco',
   lindaMar:     'Linda-Mar-State-Beach',
-  mavericks:    'Mavericks'
+  mavericks:    'Mavericks',
+  dillonBeach:  'Dillon-Beach',
+  salmonCreek:  'Salmon-Creek'
 };
 
 const HEADERS = {
