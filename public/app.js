@@ -546,13 +546,11 @@ function renderForecastTable(intervals, tides, source) {
   const DAY_SEP= '╟' + '─'.repeat(totalW) + '╢';
   const BOT    = '╚' + '═'.repeat(totalW) + '╝';
 
-  const header = `║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║`;
-
-  const srcLabel = source === 'open-meteo' ? ' // SRC: OPEN-METEO (SURFLINE UNAVAILABLE)' : '';
   let html = `<pre class="forecast-table">`;
-  html += `<span class="tbl-border">${escHtml(TOP)}\n`;
-  if (srcLabel) {
-    html += `</span><span class="tbl-amber">║  ${pad(srcLabel.trim(), totalW - 2)}║\n</span>`;
+  html += `<span class="tbl-border">${escHtml(TOP)}\n</span>`;
+  if (source === 'open-meteo') {
+    const srcLabel = 'SRC: OPEN-METEO (SURFLINE UNAVAILABLE)';
+    html += `<span class="tbl-amber">║  ${pad(srcLabel, totalW - 2)}║\n</span>`;
     html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
   }
   html += `<span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║\n</span>`;
