@@ -108,16 +108,27 @@ function render() {
   if (nameEl) nameEl.textContent = spotName.toUpperCase();
 
   // Normalize data sources once
-  const surflineData      = state.forecastData.surfline || [];
-  const stormglassNorm    = normalizeStormglassForTable(state.forecastData.stormglass || []);
-  const openMeteoNorm     = normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
-  const useStormglass     = stormglassNorm.length > 0;
-  const useOpenMeteo      = openMeteoNorm.length > 0;
+  const surflineData       = state.forecastData.surfline || [];
+  const surfForecastNorm   = normalizeSurfForecastForTable(state.forecastData.surfForecast || {});
+  const stormglassNorm     = normalizeStormglassForTable(state.forecastData.stormglass || []);
+  const openMeteoNorm      = normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
 
-  // Table: Stormglass (primary) → Open-Meteo (fallback)
-  // Surfline would be primary but it's blocked on production
-  const tableData      = useStormglass ? stormglassNorm : openMeteoNorm;
-  const verdictSource  = useStormglass ? 'stormglass' : (useOpenMeteo ? 'open-meteo' : 'buoy');
+  const useSurfForecast    = surfForecastNorm.length > 0;
+  const useStormglass      = stormglassNorm.length > 0;
+  const useOpenMeteo       = openMeteoNorm.length > 0;
+
+  // Table: Surf-Forecast.com (primary, 8/day) → Stormglass (backup, hourly) → Open-Meteo (fallback, hourly)
+  let tableData, verdictSource;
+  if (useSurfForecast) {
+    tableData = surfForecastNorm;
+    verdictSource = 'surf-forecast';
+  } else if (useStormglass) {
+    tableData = stormglassNorm;
+    verdictSource = 'stormglass';
+  } else {
+    tableData = openMeteoNorm;
+    verdictSource = useOpenMeteo ? 'open-meteo' : 'buoy';
+  }
 
   // Verdict uses the selected day's slice
   const dayData       = getDaySlice(tableData, state.currentDay);
