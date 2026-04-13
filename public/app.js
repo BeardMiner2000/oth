@@ -349,34 +349,21 @@ function calculateVerdict(data) {
 
   let verdict, cls;
 
+  // YES for everything except scary (too big/powerful)
   if (flat) {
-    verdict = '[ SWIM DAY! ]';
-    cls     = 'swim';
+    cls = 'swim';
   } else if (scary) {
-    // Override score label when wave height alone says scary
-    if (score < 25) {
-      verdict = '[ KINDA SCARY ]';
-      cls     = 'scary';
-    } else {
-      verdict = '[ TOO CHUNKY ]';
-      cls     = 'chunky';
-    }
+    cls = score < 25 ? 'scary' : 'chunky';
   } else if (score >= 80) {
-    verdict = '[ HUGE STOKE! ]';
-    cls     = 'epic';
+    cls = 'epic';
   } else if (score >= 62) {
-    verdict = '[ JL WOULD GO ]';
-    cls     = 'good';
+    cls = 'good';
   } else if (score >= 44) {
-    verdict = '[ MAYBE... ]';
-    cls     = 'marginal';
-  } else if (score >= 28) {
-    verdict = '[ TOO CHUNKY ]';
-    cls     = 'chunky';
+    cls = 'marginal';
   } else {
-    verdict = '[ KINDA SCARY ]';
-    cls     = 'scary';
+    cls = 'chunky';
   }
+  verdict = scary ? '[ NO ]' : '[ YES ]';
 
   return { verdict, score, cls, reasons };
 }
@@ -396,16 +383,16 @@ function renderVerdictPanel(verdict) {
 
   textEl.textContent = verdict.verdict;
 
-  // Label
+  // Label — condition descriptor + OTH verdict question
   const labels = {
-    epic:     'SURF REPORT // SLOW CLEAN PERFECTION',
-    good:     'SURF REPORT // CONDITIONS FAVORABLE',
-    marginal: 'SURF REPORT // MARGINAL CONDITIONS',
-    chunky:   'SURF REPORT // GETTING A BIT MUCH',
-    scary:    'SURF REPORT // TOO MUCH POWER IN THE WATER',
-    swim:     'SURF REPORT // GREAT DAY FOR A SWIM + EXERCISE'
+    epic:     'OTH WOULD GO? // HUGE STOKE — SLOW CLEAN PERFECTION',
+    good:     'OTH WOULD GO? // CONDITIONS FAVORABLE',
+    marginal: 'OTH WOULD GO? // MARGINAL BUT WORTH IT',
+    chunky:   'OTH WOULD GO? // GETTING CHUNKY — TIDE IT OUT',
+    scary:    'OTH WOULD GO? // TOO MUCH POWER IN THE WATER',
+    swim:     'OTH WOULD GO? // SWIM + EXERCISE DAY'
   };
-  if (labelEl) labelEl.textContent = labels[verdict.cls] || 'SURF REPORT';
+  if (labelEl) labelEl.textContent = labels[verdict.cls] || 'OTH WOULD GO?';
 
   // Stoke meter
   if (stokeEl) {
@@ -878,7 +865,7 @@ function drawScene(canvas, t) {
   const scrollPx = (t * 0.000083) % 1;
   const scrollN  = Math.floor(scrollPx * NW);
 
-  // Surfer locked in the pocket at 40% from left
+  // Surfer at 40% from left
   const surferNX = Math.floor(NW * 0.40);
 
   // Wave profile heights (logical Y — smaller = higher on screen)
@@ -886,21 +873,30 @@ function drawScene(canvas, t) {
   const wwNY     = Math.floor(NH * 0.62);  // already-broken whitewater surface
   const flatNY   = NH - 4;                 // flat outside swell
 
-  // Wave surface for any column (relative to surfer)
+  // ── Ride cycle: surfer drops down the face then climbs back (15s loop) ──
+  const rideCycle = (t % 15000) / 15000;
+  const ridePhase = (1 - Math.cos(rideCycle * Math.PI * 2)) / 2;  // smooth 0→1→0
+
+  // Surfer's actual Y on the wave face — oscillates down then back up
+  const maxFaceDrop = Math.floor((flatNY - pocketNY) * 0.45);
+  const dropRows    = Math.floor(ridePhase * maxFaceDrop);
+  const surferFaceY = pocketNY + dropRows;
+
+  // Break point advances as surfer drops (wave slowly catching up)
+  const catchUp      = Math.floor(ridePhase * 2);   // 0–2 columns
+  const crashBndry   = -14 + catchUp;               // dist threshold, approaches -12
+
+  // Wave surface height for any column
   function waveSurface(nx) {
     const dist = nx - surferNX;
-    if (dist < -14) {
-      // Whitewater — flat, already broken
+    if (dist < crashBndry) {
       return wwNY;
     } else if (dist < -1) {
-      // Crashing/pitching zone — rises sharply to pocket height
-      const frac = (dist + 14) / 13;
+      const frac = (dist - crashBndry) / (-1 - crashBndry);
       return Math.round(wwNY - (wwNY - pocketNY) * frac);
     } else if (dist <= 2) {
-      // Pocket — maximum height
       return pocketNY;
     } else if (dist <= 22) {
-      // Shoulder — gracefully flattens out
       const frac = Math.min(1, (dist - 2) / 20);
       return Math.round(pocketNY + (flatNY - pocketNY) * frac);
     } else {
@@ -928,8 +924,8 @@ function drawScene(canvas, t) {
     const crestNY  = waveSurface(nx);
     const x        = nx * PX;
 
-    const isWhitewater = dist < -14;
-    const isCrashing   = dist >= -14 && dist < -1;
+    const isWhitewater = dist < crashBndry;
+    const isCrashing   = dist >= crashBndry && dist < -1;
     const isPocket     = dist >= -1 && dist <= 2;
 
     // ── Pitching lip arch — white pixels curling above crest in crash zone ──
@@ -994,16 +990,13 @@ function drawScene(canvas, t) {
   }
 
   // ── Surfer ────────────────────────────────────────────────────────────────
-  const surfaceNY = waveSurface(surferNX);   // = pocketNY (flat in the pocket)
-
-  // Board rail (row 13 of sprite) aligns with wave surface
+  // Sprite positioned on the wave face — oscillates down/up with ride cycle
   const spriteX = surferNX * PX - Math.floor((SPRITE_W * PX) / 2);
-  const spriteY = (surfaceNY + 1) * PX - SPRITE_H * PX;
+  const spriteY = surferFaceY * PX - SPRITE_H * PX;
 
-  // Subtle sway (slope is ~0 in pocket, so add a gentle wobble)
-  const slope = waveSurface(surferNX + 2) - waveSurface(surferNX - 2);
-  const wobble = Math.sin(t * 0.0003) * 0.018;
-  const tiltAngle = slope * 0.035 + wobble;
+  // Tilt: nose down when dropping, nose up when climbing, gentle wobble throughout
+  const wobble    = Math.sin(t * 0.0003) * 0.015;
+  const tiltAngle = -Math.sin(rideCycle * Math.PI * 2) * 0.07 + wobble;
   const pivotX = spriteX + (SPRITE_W * PX) / 2;
   const pivotY = spriteY + SPRITE_H * PX;
 
