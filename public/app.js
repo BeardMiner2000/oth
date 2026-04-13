@@ -105,29 +105,25 @@ function render() {
   const nameEl = document.getElementById('forecast-spot-name');
   if (nameEl) nameEl.textContent = spotName.toUpperCase();
 
-  // Get the currently displayed day's data slice
-  const surflineData = state.forecastData.surfline || [];
-  const dayData = getDaySlice(surflineData, state.currentDay);
+  // Normalize data sources once
+  const surflineData   = state.forecastData.surfline || [];
+  const openMeteoNorm  = normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
+  const useSurfline    = surflineData.length > 0;
 
-  // Fall back to Open-Meteo if no Surfline data for this day
-  const openMeteoData = state.forecastData.openMeteo || [];
-  const openMeteoDayData = getDaySlice(openMeteoData, state.currentDay);
-
-  // Verdict — prefer Surfline, fall back to Open-Meteo then buoy
-  const verdictInput = buildVerdictInput(
-    dayData.length ? dayData : openMeteoDayData,
+  // Verdict uses the selected day's slice — prefer Surfline, fall back to Open-Meteo
+  const dayData        = getDaySlice(useSurfline ? surflineData : openMeteoNorm, state.currentDay);
+  const verdictSource  = useSurfline ? 'surfline' : (dayData.length ? 'open-meteo' : 'buoy');
+  const verdictInput   = buildVerdictInput(
+    dayData,
     Array.isArray(state.buoyData) ? state.buoyData[0] : state.buoyData,
-    dayData.length ? 'surfline' : (openMeteoDayData.length ? 'open-meteo' : 'buoy')
+    verdictSource
   );
   const verdict = calculateVerdict(verdictInput);
   renderVerdictPanel(verdict);
 
-  // Forecast table — prefer Surfline, fall back to normalized Open-Meteo
-  const surflineIntervals = state.forecastData.surfline || [];
-  const tableIntervals = surflineIntervals.length > 0
-    ? surflineIntervals
-    : normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
-  const tableSource = surflineIntervals.length > 0 ? 'surfline' : 'open-meteo';
+  // Forecast table — all intervals, prefer Surfline, fall back to normalized Open-Meteo
+  const tableIntervals = useSurfline ? surflineData : openMeteoNorm;
+  const tableSource    = useSurfline ? 'surfline' : 'open-meteo';
   renderForecastTable(tableIntervals, state.forecastData.tides, tableSource);
 
   // Buoy panel
@@ -227,11 +223,12 @@ function buildVerdictInput(daySlice, buoyData, sourceHint = 'surfline') {
     ? degToCompass(interval.wind.direction)
     : '---';
 
+  const dominantSwell = (interval.swells || []).find(s => s.height > 0);
   return {
     wave: {
       min:    interval.surf ? interval.surf.min : 0,
       max:    interval.surf ? interval.surf.max : 0,
-      period: (interval.swells && interval.swells[0]) ? interval.swells[0].period : 0,
+      period: dominantSwell ? dominantSwell.period : 0,
       swellDir
     },
     wind: {
@@ -241,7 +238,7 @@ function buildVerdictInput(daySlice, buoyData, sourceHint = 'surfline') {
       type:      interval.wind ? interval.wind.directionType : ''
     },
     tide:   interval.tide || null,
-    source: 'surfline'
+    source: sourceHint
   };
 }
 
