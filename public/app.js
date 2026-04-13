@@ -142,9 +142,10 @@ function normalizeOpenMeteoForTable(intervals) {
     .map(e => ({
       timestamp: e.timestamp,
       surf: {
-        // Open-Meteo significant wave height ≈ rough surf height for NorCal
-        min: e.waveHeightFt ? Math.max(0, Math.round((e.waveHeightFt * 0.8) * 2) / 2) : 0,
-        max: e.waveHeightFt ? Math.round((e.waveHeightFt * 1.1) * 2) / 2            : 0
+        // Open-Meteo wave_height is significant wave height (open ocean).
+        // Bolinas sees ~35% of Hs due to Point Reyes shadow + headland refraction.
+        min: e.waveHeightFt ? Math.max(0.5, Math.round((e.waveHeightFt * 0.30) * 2) / 2) : 0,
+        max: e.waveHeightFt ? Math.max(1.0, Math.round((e.waveHeightFt * 0.40) * 2) / 2) : 0
       },
       swells: e.swellHeightFt ? [{
         height:    e.swellHeightFt,
@@ -202,9 +203,17 @@ function buildVerdictInput(daySlice, buoyData, sourceHint = 'surfline') {
     // Fall back to buoy data if no Surfline
     if (buoyData && buoyData.latest) {
       const b = buoyData.latest;
+      // Buoy 46026 measures open-ocean significant wave height at the SF Bar.
+      // Bolinas sees ~40% of that due to headland shadow + Point Reyes blocking.
+      // Use dominantPeriod if available, fall back to avgPeriod.
+      const rawFt  = b.waveHeightFt || 0;
+      const surfFt = rawFt * 0.40;
       return {
-        wave:   { min: b.waveHeightFt || 0, max: (b.waveHeightFt || 0) * 1.2, period: b.dominantPeriod },
-        wind:   { speed: b.windSpeedKts || 0, direction: b.windDirection || '' },
+        wave:   { min: Math.round(surfFt * 0.8 * 2) / 2,
+                  max: Math.round(surfFt * 1.1 * 2) / 2,
+                  period: b.dominantPeriod || b.avgPeriod || 0,
+                  swellDir: b.swellDirectionCompass || '' },
+        wind:   { speed: b.windSpeedKts || 0, direction: b.windDirection || '', gust: b.windGustKts || 0, type: '' },
         tide:   null,
         source: 'buoy'
       };
@@ -399,7 +408,7 @@ function calculateVerdict(data) {
   }
   verdict = scary ? '[ NO ]' : '[ YES ]';
 
-  return { verdict, score, cls, reasons };
+  return { verdict, score, cls, reasons, source: data ? data.source : null };
 }
 
 // ─── Render: Verdict Panel ────────────────────────────────────────────────────
@@ -433,11 +442,13 @@ function renderVerdictPanel(verdict) {
     stokeEl.textContent = buildStokeMeter(verdict.score);
   }
 
-  // Reasons
+  // Reasons + data source tag
   if (reasonEl) {
-    reasonEl.innerHTML = verdict.reasons
+    const srcMap = { surfline: 'SURFLINE', 'open-meteo': 'OPEN-METEO', buoy: 'NOAA BUOY (FALLBACK)' };
+    const srcTag = verdict.source ? `<span class="reason-item reason-neutral">[ SRC: ${srcMap[verdict.source] || verdict.source} ]</span>` : '';
+    reasonEl.innerHTML = (verdict.reasons
       ? verdict.reasons.map(r => `<span class="reason-item ${r.cls}">[ ${r.text} ]</span>`).join(' ')
-      : '';
+      : '') + ' ' + srcTag;
   }
 }
 
