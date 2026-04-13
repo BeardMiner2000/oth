@@ -156,7 +156,7 @@ function normalizeOpenMeteoForTable(intervals) {
       },
       swells: e.swellHeightFt ? [{
         height:    e.swellHeightFt,
-        period:    e.swellPeriod    || 0,
+        period:    e.swellPeriod || 0,    // use swell period (dominant swell), not wave_period
         direction: e.swellDirection || 0,
         optimalScore: 0
       }] : [],

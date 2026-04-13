@@ -74,7 +74,7 @@ async function getMarineForecast(lat, lon) {
       wavePeriod:        h.wave_period       ? round1(h.wave_period[i])       : null,
       waveDirection:     h.wave_direction    ? h.wave_direction[i]            : null,
       swellHeightFt:     h.swell_wave_height ? round1(h.swell_wave_height[i]) : null,
-      swellPeriod:       h.swell_wave_period ? round1(h.swell_wave_period[i]) : null,
+      swellPeriod:       h.swell_wave_period ? round1(h.swell_wave_period[i]) : null,   // use swell period, not wave period
       swellDirection:    h.swell_wave_direction ? h.swell_wave_direction[i]   : null,
       windSpeedKts:      wind.windSpeedKts    || null,
       windDirectionDeg:  wind.windDirectionDeg || null,
