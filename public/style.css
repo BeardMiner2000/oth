@@ -451,6 +451,9 @@ header {
 .error-box .err-border { color: rgba(200,134,10,0.35); }
 .error-box .err-text   { color: var(--chunky); }
 
+/* ─── Status Bar (above forecast) ───────────────────────────────────────────── */
+#status-bar { margin-bottom: 1rem; }
+
 /* ─── Loading Bar ────────────────────────────────────────────────────────────── */
 #loading-bar-wrap { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; }
 

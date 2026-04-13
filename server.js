@@ -80,20 +80,23 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
   }
 
   try {
-    // Fetch Surfline + Open-Meteo in parallel; tolerate partial failures
-    const [waveResult, windResult, tideResult, condResult, meteoResult] = await Promise.allSettled([
+    // Fetch Surfline + Open-Meteo + NOAA tides in parallel; tolerate partial failures
+    const [waveResult, windResult, tideResult, condResult, meteoResult, noaaTideResult] = await Promise.allSettled([
       surfline.getWaveForecast(spotMeta.id),
       surfline.getWindForecast(spotMeta.id),
       surfline.getTideForecast(spotMeta.id),
       surfline.getConditions(spotMeta.id),
-      openMeteo.getMarineForecast(spotMeta.lat, spotMeta.lon)
+      openMeteo.getMarineForecast(spotMeta.lat, spotMeta.lon),
+      noaa.getTidePredictions('9414958')   // Bolinas tide gauge — fallback when Surfline blocked
     ]);
 
-    const waves  = waveResult.status  === 'fulfilled' ? waveResult.value  : [];
-    const winds  = windResult.status  === 'fulfilled' ? windResult.value  : [];
-    const tides  = tideResult.status  === 'fulfilled' ? tideResult.value  : [];
-    const conds  = condResult.status  === 'fulfilled' ? condResult.value  : [];
-    const meteo  = meteoResult.status === 'fulfilled' ? meteoResult.value : [];
+    const waves      = waveResult.status  === 'fulfilled' ? waveResult.value      : [];
+    const winds      = windResult.status  === 'fulfilled' ? windResult.value      : [];
+    const sfTides    = tideResult.status  === 'fulfilled' ? tideResult.value      : [];
+    const noaaTides  = noaaTideResult.status === 'fulfilled' ? noaaTideResult.value : [];
+    const tides      = sfTides.length > 0 ? sfTides : noaaTides;   // prefer Surfline tides
+    const conds      = condResult.status  === 'fulfilled' ? condResult.value      : [];
+    const meteo      = meteoResult.status === 'fulfilled' ? meteoResult.value     : [];
 
     // Merge wave + wind by timestamp
     const merged = mergeWaveWind(waves, winds).map(entry => ({

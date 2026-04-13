@@ -153,7 +153,12 @@ function normalizeOpenMeteoForTable(intervals) {
         direction: e.swellDirection || 0,
         optimalScore: 0
       }] : [],
-      wind: null,
+      wind: e.windSpeedKts != null ? {
+        speed:         e.windSpeedKts,
+        direction:     e.windDirectionDeg || 0,
+        directionType: '',
+        gust:          e.windGustKts || 0
+      } : null,
       tide: null
     }));
 }
@@ -504,8 +509,13 @@ function renderForecastTable(intervals, tides, source) {
     const windDir   = degToCompass(windDeg);
     const windStr   = windSpeed !== null ? `${windDir} ${Math.round(windSpeed)}kt` : '---';
 
-    // Tide (closest)
-    const tideHeight = entry.tide ? entry.tide.height : null;
+    // Tide (from entry or closest match in tides array)
+    const tideEntry  = entry.tide || (tides && tides.length
+      ? tides.reduce((best, curr) =>
+          Math.abs(curr.timestamp - entry.timestamp) < Math.abs(best.timestamp - entry.timestamp)
+            ? curr : best)
+      : null);
+    const tideHeight = tideEntry ? tideEntry.height : null;
     const tideStr    = tideHeight !== null ? `${tideHeight.toFixed(1)}ft` : '----';
 
     // Star rating: derive from wave + period for display

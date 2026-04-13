@@ -170,7 +170,39 @@ async function getBuoyData(buoyId) {
   };
 }
 
+/**
+ * Fetch hourly tide height predictions from NOAA Tides & Currents.
+ * Station 9414958 = Bolinas, CA (closest gauge to the surf spots).
+ * Returns: [ { timestamp, height, type } ]
+ */
+async function getTidePredictions(stationId) {
+  const now = new Date();
+  const end = new Date(now);
+  end.setDate(now.getDate() + 6);
+  const fmt = d =>
+    `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+
+  const url =
+    'https://api.tidesandcurrents.noaa.gov/api/prod/datagetter' +
+    `?begin_date=${fmt(now)}&end_date=${fmt(end)}` +
+    `&station=${stationId}&product=predictions&datum=MLLW` +
+    `&time_zone=lst/ldt&interval=h&units=english&application=JLWouldGo&format=json`;
+
+  const res = await axios.get(url, {
+    headers: { 'User-Agent': 'JLWouldGo/1.0' },
+    timeout: 10000
+  });
+
+  const predictions = (res.data && res.data.predictions) ? res.data.predictions : [];
+  return predictions.map(p => ({
+    timestamp: Math.floor(new Date(p.t).getTime() / 1000),
+    height:    parseFloat(p.v),
+    type:      'NORMAL'
+  }));
+}
+
 module.exports = {
   BUOYS,
-  getBuoyData
+  getBuoyData,
+  getTidePredictions
 };
