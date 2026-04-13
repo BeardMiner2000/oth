@@ -169,6 +169,13 @@ async function scrapeSpotForecast(spotSlug) {
       const energyMatch = (energy[i] || '').match(/(\d+)/);
       const energyKj = energyMatch ? parseInt(energyMatch[1]) : null;
 
+      // Parse tide times: "8:54 AM 1.0" or similar → extract "8:54 AM"
+      function parseTideTime(tideStr) {
+        if (!tideStr) return null;
+        const match = tideStr.match(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?)/i);
+        return match ? match[1].trim() : null;
+      }
+
       result.data.push({
         timestamp:     ts,
         dayLabel:      days[i],
@@ -183,8 +190,8 @@ async function scrapeSpotForecast(spotSlug) {
         windState,
         rating10,
         energyKj,
-        highTideStr:   highTides[i] || '',
-        lowTideStr:    lowTides[i] || ''
+        highTideTime:  parseTideTime(highTides[i]),
+        lowTideTime:   parseTideTime(lowTides[i])
       });
     }
 

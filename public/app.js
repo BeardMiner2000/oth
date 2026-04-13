@@ -537,6 +537,23 @@ function renderSurfForecastSection(sfData) {
     return;
   }
 
+  // Helper: find interval closest to a time slot (AM/PM/Night)
+  function findIntervalForTide(intervals, tideTime) {
+    if (!tideTime || !intervals.length) return null;
+    const hour = parseInt(tideTime.match(/\d+/)?.[0] || 0);
+    let closest = intervals[0];
+    let minDiff = Infinity;
+    intervals.forEach(i => {
+      const slotHour = i.timeSlot === 'AM' ? 6 : i.timeSlot === 'PM' ? 14 : 22;
+      const diff = Math.abs(slotHour - hour);
+      if (diff < minDiff) {
+        minDiff = diff;
+        closest = i;
+      }
+    });
+    return closest;
+  }
+
   // Group by day
   const byDay = {};
   patchData.forEach(interval => {
@@ -549,21 +566,30 @@ function renderSurfForecastSection(sfData) {
   html += `<pre class="forecast-table">`;
 
   Object.entries(byDay).forEach(([dayLabel, intervals]) => {
-    // Find best time (highest rating)
-    let best = intervals[0];
-    intervals.forEach(i => {
-      if ((i.rating10 || 0) > (best.rating10 || 0)) best = i;
-    });
+    // Get first interval to extract tide times
+    const sample = intervals[0];
+    const lowTideTime = sample.lowTideTime || '---';
+    const highTideTime = sample.highTideTime || '---';
 
-    const bestTime = best.timeSlot || '?';
-    const bestWaves = best.waveHeightFt ? Math.round(best.waveHeightFt * 2) / 2 : 0;
-    const bestPeriod = best.period ? Math.round(best.period) : 0;
-    const bestRating = Math.round((best.rating10 || 0) / 2);
-    const stars = '★'.repeat(bestRating) + '☆'.repeat(5 - bestRating);
-    const tideInfo = best.highTideStr || best.lowTideStr || '';
+    // Find conditions at each tide
+    const lowInterval = findIntervalForTide(intervals, lowTideTime);
+    const highInterval = findIntervalForTide(intervals, highTideTime);
 
-    const cls = bestRating >= 3 ? 'tbl-good' : bestRating >= 2 ? 'tbl-data' : 'tbl-swim';
-    html += `<span class="${cls}">  ${dayLabel.padEnd(14)} ${bestTime.padEnd(8)} ${String(bestWaves).padEnd(6)}FT ${String(bestPeriod).padEnd(3)}s ${stars}\n</span>`;
+    function formatTideInfo(interval, tideTime) {
+      if (!interval || !tideTime || tideTime === '---') return '--- ---    ☆☆☆☆☆';
+      const w = interval.waveHeightFt ? Math.round(interval.waveHeightFt * 2) / 2 : 0;
+      const r = Math.round((interval.rating10 || 0) / 2);
+      const stars = '★'.repeat(r) + '☆'.repeat(5 - r);
+      return `${tideTime.padEnd(7)} ${String(w)}FT ${stars}`;
+    }
+
+    const lowInfo = formatTideInfo(lowInterval, lowTideTime);
+    const highInfo = formatTideInfo(highInterval, highTideTime);
+
+    const lowRating = lowInterval ? Math.round((lowInterval.rating10 || 0) / 2) : 0;
+    const cls = lowRating >= 3 ? 'tbl-good' : lowRating >= 2 ? 'tbl-data' : 'tbl-swim';
+
+    html += `<span class="${cls}">  ${dayLabel.padEnd(12)}  LOW ${lowInfo}  |  HIGH ${highInfo}\n</span>`;
   });
 
   html += `</pre>`;
