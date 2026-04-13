@@ -8,8 +8,8 @@ const cheerio = require('cheerio');
 const SURF_FORECAST_SLUGS = {
   bolinas:      ['The-Patch', 'Bolinas'],
   stinson:      'Stinson-Beach',
-  oceanBeachSF: 'Ocean-Beach-San-Francisco',
-  lindaMar:     'Linda-Mar-State-Beach',
+  oceanBeachSF: 'Ocean-Beach',
+  lindaMar:     'Linda-Lane-Beach',
   mavericks:    'Mavericks',
   dillonBeach:  'Dillon-Beach',
   salmonCreek:  'Salmon-Creek'
