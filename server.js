@@ -104,14 +104,32 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       tide: closestTide(tides, entry.timestamp)
     }));
 
-    // Also try surf-forecast.com for supplemental data
+    // Fetch surf-forecast.com — supports single slug or array (merge multiple breaks)
     let sfData = { data: [], error: null };
-    const sfSlug = surfForecast.SURF_FORECAST_SLUGS[spotKey];
-    if (sfSlug) {
+    const sfSlugs = surfForecast.SURF_FORECAST_SLUGS[spotKey];
+    if (sfSlugs) {
       try {
-        sfData = await surfForecast.scrapeSpotForecast(sfSlug);
+        const slugList = Array.isArray(sfSlugs) ? sfSlugs : [sfSlugs];
+        const sfResults = await Promise.allSettled(
+          slugList.map(s => surfForecast.scrapeSpotForecast(s))
+        );
+        const successful = sfResults
+          .filter(r => r.status === 'fulfilled' && r.value.data.length > 0)
+          .map(r => r.value.data);
+        if (successful.length > 0) {
+          sfData = {
+            data:      surfForecast.mergeIntervals(successful),
+            error:     null,
+            fetchedAt: new Date().toISOString()
+          };
+        } else {
+          const firstErr = sfResults.find(r => r.status === 'rejected' || r.value.error);
+          sfData.error = firstErr
+            ? (firstErr.reason?.message || firstErr.value?.error || 'No data')
+            : 'No data returned';
+        }
       } catch (e) {
-        sfData = { data: [], error: e.message };
+        sfData.error = e.message;
       }
     }
 

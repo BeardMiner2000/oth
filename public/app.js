@@ -30,7 +30,9 @@ const SPOTS = {
 const DIR_NAMES = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
 
 function degToCompass(deg) {
-  if (deg === null || deg === undefined || isNaN(deg)) return '---';
+  if (deg === null || deg === undefined) return '---';
+  if (typeof deg === 'string') return deg || '---'; // already a compass label
+  if (isNaN(deg)) return '---';
   return DIR_NAMES[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
 }
 
@@ -107,13 +109,19 @@ function render() {
 
   // Normalize data sources once
   const surflineData   = state.forecastData.surfline || [];
+  const sfNorm         = normalizeSurfForecastForTable(state.forecastData.surfForecast);
   const openMeteoNorm  = normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
-  const useSurfline    = surflineData.length > 0;
 
-  // Verdict uses the selected day's slice — prefer Surfline, fall back to Open-Meteo
-  const dayData        = getDaySlice(useSurfline ? surflineData : openMeteoNorm, state.currentDay);
-  const verdictSource  = useSurfline ? 'surfline' : (dayData.length ? 'open-meteo' : 'buoy');
-  const verdictInput   = buildVerdictInput(
+  const useSurfline    = surflineData.length > 0;
+  const useSurfForecast = !useSurfline && sfNorm.length > 0;
+  const primaryData    = useSurfline ? surflineData : (useSurfForecast ? sfNorm : openMeteoNorm);
+  const verdictSource  = useSurfline ? 'surfline'
+    : (useSurfForecast ? 'surf-forecast'
+    : (openMeteoNorm.length ? 'open-meteo' : 'buoy'));
+
+  // Verdict uses the selected day's slice
+  const dayData       = getDaySlice(primaryData, state.currentDay);
+  const verdictInput  = buildVerdictInput(
     dayData,
     Array.isArray(state.buoyData) ? state.buoyData[0] : state.buoyData,
     verdictSource
@@ -121,10 +129,11 @@ function render() {
   const verdict = calculateVerdict(verdictInput);
   renderVerdictPanel(verdict);
 
-  // Forecast table — all intervals, prefer Surfline, fall back to normalized Open-Meteo
-  const tableIntervals = useSurfline ? surflineData : openMeteoNorm;
-  renderForecastTable(tableIntervals, state.forecastData.tides, state.forecastData.conditions);
-  renderSurfForecastSection(state.forecastData.surfForecast);
+  // Forecast table
+  renderForecastTable(primaryData, state.forecastData.tides, state.forecastData.conditions);
+
+  // surf-forecast.com cross-reference panel (only show when NOT the primary source)
+  renderSurfForecastSection(useSurfForecast ? null : state.forecastData.surfForecast);
 
   // Buoy panel
   renderBuoyPanel(state.buoyData);
@@ -159,6 +168,35 @@ function normalizeOpenMeteoForTable(intervals) {
         direction:     e.windDirectionDeg || 0,
         directionType: '',
         gust:          e.windGustKts || 0
+      } : null,
+      tide: null
+    }));
+}
+
+// ─── Surf-Forecast.com → Surfline-shape normalizer ────────────────────────────
+function normalizeSurfForecastForTable(sfData) {
+  if (!sfData || !sfData.data || sfData.error || sfData.data.length === 0) return [];
+  const nowTs = Math.floor(Date.now() / 1000);
+  return sfData.data
+    .filter(e => e.timestamp && e.timestamp >= nowTs - 3600 * 3)
+    .map(e => ({
+      timestamp: e.timestamp,
+      surf: {
+        // surf-forecast.com reports local surf height in metres — convert to ft range
+        min: e.waveHeightFt ? Math.max(0.5, Math.round(e.waveHeightFt * 0.80 * 2) / 2) : 0,
+        max: e.waveHeightFt ? Math.max(1.0, Math.round(e.waveHeightFt * 1.00 * 2) / 2) : 0
+      },
+      swells: e.period ? [{
+        height:    e.waveHeightM || 0,
+        period:    e.period,
+        direction: e.waveDirection || 0,
+        optimalScore: 0
+      }] : [],
+      wind: e.windSpeedKts ? {
+        speed:         e.windSpeedKts,
+        direction:     e.windDir || '---',   // compass string — degToCompass handles it
+        directionType: e.windState || '',
+        gust:          0
       } : null,
       tide: null
     }));
@@ -459,7 +497,7 @@ function renderVerdictPanel(verdict) {
 
   // Reasons + data source tag
   if (reasonEl) {
-    const srcMap = { surfline: 'SURFLINE', 'open-meteo': 'OPEN-METEO', buoy: 'NOAA BUOY (FALLBACK)' };
+    const srcMap = { surfline: 'SURFLINE', 'surf-forecast': 'SURF-FORECAST.COM', 'open-meteo': 'OPEN-METEO', buoy: 'NOAA BUOY (FALLBACK)' };
     const srcTag = verdict.source ? `<span class="reason-item reason-neutral">[ SRC: ${srcMap[verdict.source] || verdict.source} ]</span>` : '';
     reasonEl.innerHTML = (verdict.reasons
       ? verdict.reasons.map(r => `<span class="reason-item ${r.cls}">[ ${r.text} ]</span>`).join(' ')

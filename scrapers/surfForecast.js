@@ -3,8 +3,10 @@
 const axios   = require('axios');
 const cheerio = require('cheerio');
 
+// For Bolinas, fetch both The Patch and Bolinas Jetty (closest to The Channel)
+// and merge them into a composite reading.
 const SURF_FORECAST_SLUGS = {
-  bolinas:      'Bolinas',
+  bolinas:      ['The-Patch', 'Bolinas'],
   stinson:      'Stinson-Beach',
   oceanBeachSF: 'Ocean-Beach-San-Francisco',
   lindaMar:     'Linda-Mar-State-Beach',
@@ -13,76 +15,98 @@ const SURF_FORECAST_SLUGS = {
 
 const HEADERS = {
   'User-Agent':      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept':          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.5',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Connection':      'keep-alive',
-  'Upgrade-Insecure-Requests': '1',
-  'Cache-Control':   'max-age=0'
+  'Connection':      'keep-alive'
 };
 
-/**
- * Attempt a single HTTP GET with timeout.
- */
-async function fetchWithRetry(url, attempts = 3, delayMs = 1500) {
+const M_TO_FT   = 3.28084;
+const KMH_TO_KTS = 0.539957;
+
+async function fetchHtml(url) {
   let lastErr;
-  for (let i = 0; i < attempts; i++) {
+  for (let i = 0; i < 3; i++) {
     try {
-      const res = await axios.get(url, {
-        headers: HEADERS,
-        timeout: 15000,
-        maxRedirects: 5
-      });
+      const res = await axios.get(url, { headers: HEADERS, timeout: 15000, maxRedirects: 5 });
       return res.data;
     } catch (err) {
       lastErr = err;
-      if (i < attempts - 1) {
-        await new Promise(r => setTimeout(r, delayMs * (i + 1)));
-      }
+      if (i < 2) await new Promise(r => setTimeout(r, 1500 * (i + 1)));
     }
   }
   throw lastErr;
 }
 
 /**
- * Convert star rating text/count to numeric 1-5.
+ * Convert AM/PM/Night slot label + day-of-month string to a unix timestamp.
+ * dayLabel: "Mon 13"  timeSlot: "AM" | "PM" | "Night" | "Noon" | "Midnight"
  */
-function parseStars(text) {
-  if (!text) return 0;
-  const match = text.match(/(\d+(\.\d+)?)/);
-  return match ? parseFloat(match[1]) : 0;
-}
+function parseSlotTimestamp(dayLabel, timeSlot) {
+  const match = dayLabel.match(/(\d{1,2})$/);
+  if (!match) return null;
+  const dayNum = parseInt(match[1]);
+  const now    = new Date();
+  let month = now.getMonth();
+  let year  = now.getFullYear();
 
-/**
- * Parse wave height string like "3-4ft" or "4ft" to { min, max }.
- */
-function parseWaveHeight(text) {
-  if (!text) return { min: 0, max: 0 };
-  const clean = text.replace(/[^\d\-\.]/g, '');
-  const parts = clean.split('-');
-  if (parts.length === 2) {
-    return { min: parseFloat(parts[0]) || 0, max: parseFloat(parts[1]) || 0 };
+  // Handle month roll-over (day number looks earlier than today)
+  if (dayNum < now.getDate() - 1) {
+    month++;
+    if (month > 11) { month = 0; year++; }
   }
-  const single = parseFloat(clean) || 0;
-  return { min: single, max: single };
+
+  const hourMap = { AM: 6, PM: 14, Night: 22, Midnight: 0, Noon: 12 };
+  const hour = (hourMap[timeSlot] !== undefined) ? hourMap[timeSlot] : 6;
+  return Math.floor(new Date(year, month, dayNum, hour, 0, 0).getTime() / 1000);
 }
 
 /**
- * Scrape 6-day forecast for a spot.
+ * Parse a wave-height cell: "1.4 W", "2.1 WNW", "1.4m W"
+ * surf-forecast.com shows local surf height in metres.
+ */
+function parseWaveCell(text) {
+  const clean = text.replace(/[^\d.\s\w]/g, ' ').trim();
+  const parts = clean.split(/\s+/);
+  const m = parseFloat(parts[0]);
+  return {
+    heightM:  isNaN(m) ? 0 : m,
+    heightFt: isNaN(m) ? 0 : Math.round(m * M_TO_FT * 10) / 10,
+    direction: parts[1] || ''
+  };
+}
+
+/**
+ * Parse a wind cell: "15 SW", "12 NW", "8 NNE"
+ * surf-forecast.com reports wind in km/h.
+ */
+function parseWindCell(text) {
+  const clean = text.replace(/[^\d.\s\w]/g, ' ').trim();
+  const parts = clean.split(/\s+/);
+  const kmh   = parseFloat(parts[0]);
+  return {
+    speedKmh: isNaN(kmh) ? 0 : kmh,
+    speedKts: isNaN(kmh) ? 0 : Math.round(kmh * KMH_TO_KTS * 10) / 10,
+    direction: parts[1] || ''
+  };
+}
+
+/**
+ * Scrape 6-day forecast for one surf-forecast.com break slug.
  * Returns: { spotSlug, data: [...], error: null|string, fetchedAt }
+ *
+ * Data shape per interval:
+ *   { timestamp, dayLabel, timeSlot,
+ *     waveHeightM, waveHeightFt, waveDirection,
+ *     period, windSpeedKmh, windSpeedKts, windDir, windState,
+ *     rating10 }
  */
 async function scrapeSpotForecast(spotSlug) {
-  const url = `https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest/six_day`;
-  const result = {
-    spotSlug,
-    data:      [],
-    error:     null,
-    fetchedAt: new Date().toISOString()
-  };
+  const url    = `https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest/six_day`;
+  const result = { spotSlug, data: [], error: null, fetchedAt: new Date().toISOString() };
 
   let html;
   try {
-    html = await fetchWithRetry(url);
+    html = await fetchHtml(url);
   } catch (err) {
     result.error = `Fetch failed: ${err.message}`;
     return result;
@@ -91,108 +115,111 @@ async function scrapeSpotForecast(spotSlug) {
   try {
     const $ = cheerio.load(html);
 
-    // surf-forecast.com uses a forecast table with class 'forecast-table'
-    // Row structure varies by version; we attempt multiple selector strategies.
-
-    const forecastRows = [];
-
-    // Strategy 1: look for the forecast table
-    const table = $('table.forecast-table, .forecast-table__cell, [class*="forecast"]');
-
-    // Try to extract time headers
-    const timeHeaders = [];
-    $('tr.forecast-table__row--time td, tr.forecast-table__row--date td, .forecast-table__cell--time').each((i, el) => {
-      timeHeaders.push($(el).text().trim());
-    });
-
-    // Extract wave heights
-    const waveHeights = [];
-    $('tr.forecast-table__row--wave td, .forecast-table__cell--wave-height').each((i, el) => {
-      waveHeights.push($(el).text().trim());
-    });
-
-    // Extract periods
-    const periods = [];
-    $('tr.forecast-table__row--period td, .forecast-table__cell--period').each((i, el) => {
-      periods.push($(el).text().trim());
-    });
-
-    // Extract wind speed
-    const windSpeeds = [];
-    $('tr.forecast-table__row--wind td, .forecast-table__cell--wind').each((i, el) => {
-      windSpeeds.push($(el).text().trim());
-    });
-
-    // Extract ratings
-    const ratings = [];
-    $('tr.forecast-table__row--rating td, .forecast-table__cell--rating, .rating').each((i, el) => {
-      ratings.push($(el).text().trim());
-    });
-
-    // Strategy 2: look for JSON-LD or embedded data
-    let jsonData = null;
-    $('script[type="application/ld+json"]').each((i, el) => {
-      try {
-        const parsed = JSON.parse($(el).html());
-        if (parsed && (parsed.forecast || parsed.surfForecast)) {
-          jsonData = parsed;
-        }
-      } catch (e) { /* ignore */ }
-    });
-
-    // Build forecast entries from whatever we could extract
-    const maxLen = Math.max(timeHeaders.length, waveHeights.length, 1);
-
-    if (waveHeights.length > 0 || timeHeaders.length > 0) {
-      for (let i = 0; i < maxLen; i++) {
-        const wh = parseWaveHeight(waveHeights[i] || '');
-        forecastRows.push({
-          time:      timeHeaders[i]  || '',
-          waveMin:   wh.min,
-          waveMax:   wh.max,
-          period:    parseFloat((periods[i]    || '').replace(/[^\d\.]/g, '')) || null,
-          wind:      windSpeeds[i]   || '',
-          rating:    parseStars(ratings[i] || ''),
-          ratingRaw: ratings[i]      || ''
-        });
-      }
+    // surf-forecast.com uses <tr data-row-name="..."> for each data type
+    function row(name) {
+      const cells = [];
+      $(`tr[data-row-name="${name}"] td`).each((_, el) => cells.push($(el).text().trim()));
+      return cells;
     }
 
-    // Strategy 3: generic table row scraping as fallback
-    if (forecastRows.length === 0) {
-      $('table tr').each((rowIdx, row) => {
-        if (rowIdx === 0) return; // skip header
-        const cells = $(row).find('td');
-        if (cells.length >= 3) {
-          const texts = [];
-          cells.each((i, cell) => texts.push($(cell).text().trim()));
-          const wh = parseWaveHeight(texts[1] || texts[0] || '');
-          forecastRows.push({
-            time:    texts[0] || `Period ${rowIdx}`,
-            waveMin: wh.min,
-            waveMax: wh.max,
-            period:  parseFloat((texts[2] || '').replace(/[^\d\.]/g, '')) || null,
-            wind:    texts[3] || '',
-            rating:  parseStars(texts[4] || ''),
-            ratingRaw: texts[4] || ''
-          });
-        }
+    const days       = row('days');
+    const times      = row('time');
+    const waveRaw    = row('wave-height');
+    const periods    = row('periods');
+    const winds      = row('wind');
+    const windStates = row('wind-state');
+
+    // Ratings — try data-value attribute on inner element first, fall back to text
+    const ratings = [];
+    $('tr[data-row-name="rating"] td').each((_, el) => {
+      const dv = $(el).find('[data-value]').attr('data-value') || $(el).attr('data-value');
+      ratings.push(dv !== undefined ? String(dv) : $(el).text().trim());
+    });
+
+    const N = Math.min(days.length, times.length);
+    if (N === 0) {
+      result.error = 'No columns found — surf-forecast.com may have changed structure';
+      return result;
+    }
+
+    for (let i = 0; i < N; i++) {
+      const ts = parseSlotTimestamp(days[i], times[i]);
+      if (!ts) continue;
+
+      const wave = parseWaveCell(waveRaw[i] || '');
+      const wind = parseWindCell(winds[i] || '');
+
+      const periodMatch = (periods[i] || '').match(/(\d+)/);
+      const period = periodMatch ? parseInt(periodMatch[1]) : null;
+
+      const ratingMatch = (ratings[i] || '').match(/([\d.]+)/);
+      const rating10 = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
+
+      // windState values: "offshore", "onshore", "glassy", "cross-shore", etc.
+      // Capitalise first letter so it matches Surfline's "Offshore" / "Onshore" format
+      const ws = (windStates[i] || '').trim();
+      const windState = ws ? ws.charAt(0).toUpperCase() + ws.slice(1) : '';
+
+      result.data.push({
+        timestamp:     ts,
+        dayLabel:      days[i],
+        timeSlot:      times[i],
+        waveHeightM:   wave.heightM,
+        waveHeightFt:  wave.heightFt,
+        waveDirection: wave.direction,
+        period,
+        windSpeedKmh:  wind.speedKmh,
+        windSpeedKts:  wind.speedKts,
+        windDir:       wind.direction,
+        windState,
+        rating10
       });
     }
 
-    result.data = forecastRows;
-
-    if (forecastRows.length === 0) {
-      result.error = 'No forecast data found in page (site may have changed structure)';
+    if (result.data.length === 0) {
+      result.error = 'Rows found but no parseable data — structure may have changed';
     }
-  } catch (parseErr) {
-    result.error = `Parse error: ${parseErr.message}`;
+  } catch (err) {
+    result.error = `Parse error: ${err.message}`;
   }
 
   return result;
 }
 
+/**
+ * Merge two or more arrays of forecast intervals by timestamp.
+ * Averages numeric fields when the same time slot appears in multiple sources.
+ */
+function mergeIntervals(arrays) {
+  const byTs = {};
+  arrays.forEach(arr => {
+    arr.forEach(entry => {
+      if (!entry.timestamp) return;
+      if (!byTs[entry.timestamp]) byTs[entry.timestamp] = [];
+      byTs[entry.timestamp].push(entry);
+    });
+  });
+
+  return Object.values(byTs).map(group => {
+    if (group.length === 1) return group[0];
+    function avg(key) {
+      const vals = group.map(e => e[key]).filter(v => v != null && !isNaN(v));
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    }
+    return {
+      ...group[0],
+      waveHeightM:  avg('waveHeightM'),
+      waveHeightFt: avg('waveHeightFt'),
+      period:       avg('period'),
+      windSpeedKmh: avg('windSpeedKmh'),
+      windSpeedKts: avg('windSpeedKts'),
+      rating10:     avg('rating10')
+    };
+  }).sort((a, b) => a.timestamp - b.timestamp);
+}
+
 module.exports = {
   SURF_FORECAST_SLUGS,
-  scrapeSpotForecast
+  scrapeSpotForecast,
+  mergeIntervals
 };
