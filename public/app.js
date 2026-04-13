@@ -123,7 +123,8 @@ function render() {
 
   // Forecast table — all intervals, prefer Surfline, fall back to normalized Open-Meteo
   const tableIntervals = useSurfline ? surflineData : openMeteoNorm;
-  renderForecastTable(tableIntervals, state.forecastData.tides);
+  renderForecastTable(tableIntervals, state.forecastData.tides, state.forecastData.conditions);
+  renderSurfForecastSection(state.forecastData.surfForecast);
 
   // Buoy panel
   renderBuoyPanel(state.buoyData);
@@ -468,8 +469,50 @@ function buildStokeMeter(score) {
   return `[ ${bar} ] ${score}%`;
 }
 
+// ─── Render: Surf-Forecast.com Section ────────────────────────────────────────
+function renderSurfForecastSection(sfData) {
+  const wrap = document.getElementById('sf-wrap');
+  if (!wrap) return;
+
+  if (!sfData || sfData.error || !sfData.data || sfData.data.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
+
+  const rows = sfData.data.slice(0, 24); // cap at 24 entries
+  let html = `<div class="section-header" style="margin-top:1rem">▶ SURF-FORECAST.COM // CROSS-REFERENCE</div>`;
+  html += `<pre class="forecast-table">`;
+
+  const COL_T = 10, COL_W = 10, COL_P = 7, COL_WD = 14, COL_R = 8;
+  const tw = COL_T + COL_W + COL_P + COL_WD + COL_R + 12;
+  function pad(s, n) { const str = String(s); return str.length >= n ? str.slice(0,n) : str + ' '.repeat(n - str.length); }
+
+  html += `<span class="tbl-border">╔${'═'.repeat(tw)}╗\n</span>`;
+  html += `<span class="tbl-header">║  ${pad('TIME',COL_T)}${pad('WAVES',COL_W)}${pad('PERIOD',COL_P)}${pad('WIND',COL_WD)}${pad('RATING',COL_R)}  ║\n</span>`;
+  html += `<span class="tbl-border">╠${'═'.repeat(tw)}╣\n</span>`;
+
+  rows.forEach(r => {
+    const wStr = r.waveMax > 0 ? (r.waveMin === r.waveMax ? `${r.waveMin}FT` : `${r.waveMin}-${r.waveMax}FT`) : '---';
+    const pStr = r.period ? `${r.period}s` : '---';
+    const wdStr = r.wind || '---';
+    const stars = Math.round(r.rating || 0);
+    const starsStr = '★'.repeat(Math.min(stars,5)) + '☆'.repeat(Math.max(0,5-stars));
+    const cls = stars >= 4 ? 'tbl-good' : stars >= 2 ? 'tbl-data' : 'tbl-swim';
+    html += `<span class="tbl-border">║</span>`;
+    html += `<span class="tbl-data">  ${pad(r.time || '---', COL_T)}`;
+    html += `</span><span class="${cls}">${pad(wStr, COL_W)}</span>`;
+    html += `<span class="tbl-data">${pad(pStr, COL_P)}${pad(wdStr, COL_WD)}</span>`;
+    html += `<span class="tbl-data">${pad(starsStr, COL_R)}  </span>`;
+    html += `<span class="tbl-border">║\n</span>`;
+  });
+
+  html += `<span class="tbl-border">╚${'═'.repeat(tw)}╝\n</span>`;
+  html += `</pre>`;
+  wrap.innerHTML = html;
+}
+
 // ─── Render: Forecast Table ───────────────────────────────────────────────────
-function renderForecastTable(intervals, tides, source) {
+function renderForecastTable(intervals, tides, conditions) {
   const wrap = document.getElementById('forecast-table-wrap');
   if (!wrap) return;
 
@@ -485,7 +528,8 @@ function renderForecastTable(intervals, tides, source) {
   intervals.forEach(entry => {
     const dt       = new Date(entry.timestamp * 1000);
     const dayStr   = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }).toUpperCase();
-    const timeStr  = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+    const hr = dt.getHours();
+    const timeStr  = `${hr % 12 || 12}${hr < 12 ? 'AM' : 'PM'}`;
     const isToday  = dt.toDateString() === new Date().toDateString();
     const isNow    = Math.abs(dt - new Date()) < 3 * 60 * 60 * 1000; // within 3h
 
@@ -536,9 +580,28 @@ function renderForecastTable(intervals, tides, source) {
       rows.push({ type: 'separator', day: dayStr, isToday });
     }
 
+    // Parking lot indicator from Surfline conditions
+    const condEntry = conditions && conditions.find(c =>
+      new Date(c.timestamp * 1000).toDateString() === dt.toDateString()
+    );
+    const condSlot  = condEntry ? (hr < 12 ? condEntry.am : condEntry.pm) : null;
+    const condRel   = condSlot ? (condSlot.humanRelation || '').toUpperCase() : '';
+    const condRating = condSlot ? (condSlot.rating || 0) : 0;
+    let parkStr, parkCls;
+    if (!condSlot) {
+      parkStr = '----'; parkCls = 'tbl-data';
+    } else if (condRating >= 4 || /GOOD|EXCELLENT|EPIC|GREAT/.test(condRel)) {
+      parkStr = 'PACKED'; parkCls = 'tbl-poor';    // red = bad news for parking
+    } else if (/FAIR TO GOOD|FAIR/.test(condRel) || condRating >= 2.5) {
+      parkStr = 'BUSY'; parkCls = 'tbl-amber';
+    } else {
+      parkStr = "FRANK'S?"; parkCls = 'tbl-good';  // green = parking available
+    }
+
     rows.push({
       type: 'data',
       dayStr, timeStr, waveStr, periodStr, windStr, tideStr, stars, waveCls,
+      parkStr, parkCls,
       isNow
     });
   });
@@ -551,13 +614,14 @@ function renderForecastTable(intervals, tides, source) {
   const COL_WIND   = 12;
   const COL_TIDE   = 7;
   const COL_STARS  = 7;
+  const COL_PARK   = 10;  // "FRANK'S?" = 8 chars
 
   function pad(s, len) {
     const str = String(s);
     return str.length >= len ? str.slice(0, len) : str + ' '.repeat(len - str.length);
   }
 
-  const totalW = COL_DATE + COL_TIME + COL_WAVES + COL_PERIOD + COL_WIND + COL_TIDE + COL_STARS + 16; // pipes and spaces
+  const totalW = COL_DATE + COL_TIME + COL_WAVES + COL_PERIOD + COL_WIND + COL_TIDE + COL_STARS + COL_PARK + 16;
 
   const TOP    = '╔' + '═'.repeat(totalW) + '╗';
   const HDR_SEP= '╠' + '═'.repeat(totalW) + '╣';
@@ -566,7 +630,7 @@ function renderForecastTable(intervals, tides, source) {
 
   let html = `<pre class="forecast-table">`;
   html += `<span class="tbl-border">${escHtml(TOP)}\n</span>`;
-  html += `<span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║\n</span>`;
+  html += `<span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}${pad('PARKING',COL_PARK)}  ║\n</span>`;
   html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
 
   rows.forEach(row => {
@@ -583,6 +647,7 @@ function renderForecastTable(intervals, tides, source) {
       html += `<span class="tbl-data ${cls}">${pad(row.periodStr, COL_PERIOD)}`;
       html += `${pad(row.windStr, COL_WIND)}${pad(row.tideStr, COL_TIDE)}</span>`;
       html += `<span class="tbl-data ${cls}">${renderStars(row.stars)}  </span>`;
+      html += `<span class="${row.parkCls} ${cls}">${pad(row.parkStr, COL_PARK)}  </span>`;
       html += `<span class="tbl-border ${cls}">║\n</span>`;
     }
   });
