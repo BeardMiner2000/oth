@@ -414,7 +414,16 @@ function calculateVerdict(data) {
   }
   verdict = scary ? '[ NO ]' : '[ YES ]';
 
-  return { verdict, score, cls, reasons, source: data ? data.source : null };
+  // Parking lot indicator based on wave height
+  const waveMid = data && data.wave ? ((data.wave.min || 0) + (data.wave.max || 0)) / 2 : 0;
+  let parking;
+  if (waveMid <= 2.0) {
+    parking = { text: 'PARKING LOT: PRETTY EMPTY', cls: 'reason-good' };
+  } else {
+    parking = { text: 'PARKING LOT: FULL — WARNING: SHORTBOARDERS IN LOT', cls: 'reason-bad' };
+  }
+
+  return { verdict, score, cls, reasons, source: data ? data.source : null, parking };
 }
 
 // ─── Render: Verdict Panel ────────────────────────────────────────────────────
@@ -455,6 +464,13 @@ function renderVerdictPanel(verdict) {
     reasonEl.innerHTML = (verdict.reasons
       ? verdict.reasons.map(r => `<span class="reason-item ${r.cls}">[ ${r.text} ]</span>`).join(' ')
       : '') + ' ' + srcTag;
+  }
+
+  // Parking indicator
+  const parkEl = document.getElementById('parking-indicator');
+  if (parkEl && verdict.parking) {
+    parkEl.className = `reason-item ${verdict.parking.cls}`;
+    parkEl.textContent = `[ ${verdict.parking.text} ]`;
   }
 }
 
@@ -589,7 +605,13 @@ function renderForecastTable(intervals, tides, conditions) {
     const condRating = condSlot ? (condSlot.rating || 0) : 0;
     let parkStr, parkCls;
     if (!condSlot) {
-      parkStr = '----'; parkCls = 'tbl-data';
+      // No Surfline conditions — fall back to wave height
+      const waveMidRow = (waveMin + waveMax) / 2;
+      if (waveMidRow <= 2.0) {
+        parkStr = 'QUIET LOT'; parkCls = 'tbl-good';
+      } else {
+        parkStr = 'LOT FULL!'; parkCls = 'tbl-poor';
+      }
     } else if (condRating >= 4 || /GOOD|EXCELLENT|EPIC|GREAT/.test(condRel)) {
       parkStr = 'PACKED'; parkCls = 'tbl-poor';    // red = bad news for parking
     } else if (/FAIR TO GOOD|FAIR/.test(condRel) || condRating >= 2.5) {
