@@ -781,11 +781,11 @@ const C = {
   spray:  '#ddeeff',  // fine mist/spray
   ww:     '#4e80b0',  // whitewater base
   wwf:    '#88b8d8',  // whitewater foam
-  // Surfer — bald guy with gray beard
-  bald:   '#d4956a',  // sun-beaten bald pate
-  skin:   '#e8b468',  // warm golden skin
-  beard:  '#a8a8a4',  // gray beard
-  beardD: '#787874',  // beard shadow
+  // Surfer — bald guy with big gray beard
+  bald:   '#c87848',  // sun-burned bald pate (darker, more distinct)
+  skin:   '#e8b068',  // warm golden skin
+  beard:  '#c8c8c4',  // gray beard — light so it reads clearly
+  beardD: '#909090',  // beard shadow
   suit:   '#1e4880',  // wetsuit blue
   suitD:  '#142e58',  // dark wetsuit shadow
   board:  '#e8cc3a',  // yellow longboard
@@ -793,48 +793,52 @@ const C = {
   wax:    '#f0ead8',  // deck wax / feet
 };
 
-// ── Surfer sprite: 2 frames, 10×14 logical pixels ────────────────────────────
-// Bald head, big gray beard, noseriding — left-facing profile.
-// Nose of board is on the LEFT (direction of wave travel).
+// ── Surfer sprite: 2 frames, 10×16 logical pixels ────────────────────────────
+// Left-facing profile (canvas flipped → appears right-facing on screen).
+// Big bald dome (3 rows), dominant gray beard (5 rows), noseriding on the tip.
 const FRAMES = [
-  // Frame 0 — arms spread wide, classic noserider balance
+  // Frame 0 — arms wide, cruising the nose
   [
-    [null, 'bald','bald','bald', null,  null,  null, null, null, null],
-    ['bald','bald','bald','bald','bald', null,  null, null, null, null],
-    ['skin','skin','skin','skin','bald', null,  null, null, null, null],
-    ['beard','beard','skin','suit', null,  null,  null, null, null, null],
-    ['beard','beard','beard','suit','suit', null,  null, null, null, null],
-    ['beard','beard','suit','suit','suit','suit', null, null, null, null],
-    [null, 'suit','suit','suit','suit','suit', null, null, null, null],
-    ['skin','suit','suit','suit','suit', null, 'skin', null, null, null],
-    [null,  null, 'suit','suit','suit', null,  null, null, null, null],
-    [null, 'suitD','suit','suitD', null,  null,  null, null, null, null],
-    ['suitD','suit', null, 'suit', null,  null,  null, null, null, null],
-    ['wax', 'wax',  null, 'wax',  null,  null,  null, null, null, null],
+    [null,  null, 'bald','bald','bald', null,  null, null, null, null],  // bald dome top
+    ['bald','bald','bald','bald','bald','bald', null, null, null, null],  // head wide
+    ['skin','skin','skin','skin','skin','bald', null, null, null, null],  // face
+    ['beard','beard','skin','skin','suit', null, null, null, null, null], // chin/neck
+    ['beard','beard','beard','beard','suit','suit', null, null, null, null], // beard
+    ['beard','beard','beard','beard','beard','suit', null, null, null, null], // beard peak
+    ['beard','beard','beard','beard','beard', null, null, null, null, null], // widest beard
+    [null, 'beard','beard','suit','suit','suit', null, null, null, null],    // beard base
+    [null,  'suit','suit','suit','suit','suit', null, null, null, null],  // torso
+    ['skin','suit','suit','suit','suit', null, 'skin', null, null, null], // arms spread
+    [null,  null, 'suit','suit','suit', null,  null, null, null, null],   // lower body
+    [null, 'suitD','suit','suitD', null, null,  null, null, null, null],  // knees bent
+    ['suitD','suit', null, 'suit', null, null,  null, null, null, null],  // lower legs
+    ['wax', 'wax',  null, 'wax',  null, null,  null, null, null, null],  // feet at nose
     ['board','board','board','board','board','board','board','board','board','boardD'],
     [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD', null],
   ],
-  // Frame 1 — slight weight shift, arms lift a hair
+  // Frame 1 — arms shift slightly, lazy weight adjustment
   [
-    [null, 'bald','bald','bald', null,  null,  null, null, null, null],
-    ['bald','bald','bald','bald','bald', null,  null, null, null, null],
-    ['skin','skin','skin','skin','bald', null,  null, null, null, null],
-    ['beard','beard','skin','suit', null,  null,  null, null, null, null],
-    ['beard','beard','beard','suit','suit', null,  null, null, null, null],
-    ['beard','suit','suit','suit','suit','suit', null, null, null, null],
-    [null, 'suit','suit','suit','suit','suit', null, null, null, null],
-    [null, 'skin','suit','suit','suit','suit','skin', null, null, null],
+    [null,  null, 'bald','bald','bald', null,  null, null, null, null],
+    ['bald','bald','bald','bald','bald','bald', null, null, null, null],
+    ['skin','skin','skin','skin','skin','bald', null, null, null, null],
+    ['beard','beard','skin','skin','suit', null, null, null, null, null],
+    ['beard','beard','beard','beard','suit','suit', null, null, null, null],
+    ['beard','beard','beard','beard','beard','suit', null, null, null, null],
+    ['beard','beard','beard','beard','beard', null, null, null, null, null],
+    [null, 'beard','beard','suit','suit','suit', null, null, null, null],
+    [null,  'suit','suit','suit','suit','suit', null, null, null, null],
+    [null, 'skin','suit','suit','suit','suit','skin', null, null, null],  // arms shifted
     [null,  null, 'suit','suit','suit', null,  null, null, null, null],
-    [null, 'suitD','suit','suitD', null,  null,  null, null, null, null],
-    ['suitD','suit', null, 'suit', null,  null,  null, null, null, null],
-    ['wax', 'wax',  null, 'wax',  null,  null,  null, null, null, null],
+    [null, 'suitD','suit','suitD', null, null,  null, null, null, null],
+    ['suitD','suit', null, 'suit', null, null,  null, null, null, null],
+    ['wax', 'wax',  null, 'wax',  null, null,  null, null, null, null],
     ['board','board','board','board','board','board','board','board','board','boardD'],
     [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD', null],
   ],
 ];
 
 const SPRITE_W = 10;
-const SPRITE_H = 14;
+const SPRITE_H = 16;
 
 function drawSprite(ctx, frame, x, y) {
   const rows = FRAMES[frame % FRAMES.length];
@@ -861,30 +865,27 @@ function drawScene(canvas, t) {
   const NW = Math.ceil(W / PX);
   const NH = Math.ceil(H / PX);
 
-  // Slow scroll for ripple/foam animation (~12s per full cycle)
+  // Foam animation scroll (~12s per full cycle)
   const scrollPx = (t * 0.000083) % 1;
   const scrollN  = Math.floor(scrollPx * NW);
 
-  // Surfer at 60% in canvas space (= 40% from left after horizontal flip)
-  const surferNX = Math.floor(NW * 0.60);
+  // ── Horizontal ride: surfer glides from left to right across canvas (25s) ──
+  // In canvas space (flipped), surferNX decreases as surfer moves visually right.
+  const rideDur     = 25000;
+  const rideProgress = (t % rideDur) / rideDur;         // 0→1
+  const surferNX    = Math.floor(NW * (0.78 - rideProgress * 0.44));
+  // Visual position: starts ~22% from left, reaches ~66% from left, then resets.
 
-  // Wave profile heights (logical Y — smaller = higher on screen)
-  const pocketNY = Math.floor(NH * 0.50);  // tallest point (pocket)
-  const wwNY     = Math.floor(NH * 0.62);  // already-broken whitewater surface
-  const flatNY   = NH - 4;                 // flat outside swell
+  // Subtle wave bob — just ±2 logical rows (not a dramatic drop)
+  const bob        = Math.round(Math.sin(t * 0.0009) * 2);
+  const pocketNY   = Math.floor(NH * 0.50);            // wave crest height
+  const surferFaceY = pocketNY + Math.max(0, bob);     // board sits on or below crest
 
-  // ── Ride cycle: surfer drops down the face then climbs back (15s loop) ──
-  const rideCycle = (t % 15000) / 15000;
-  const ridePhase = (1 - Math.cos(rideCycle * Math.PI * 2)) / 2;  // smooth 0→1→0
+  const wwNY     = Math.floor(NH * 0.60);  // whitewater surface (flat, already broken)
+  const flatNY   = NH - 4;
 
-  // Surfer's actual Y on the wave face — oscillates down then back up
-  const maxFaceDrop = Math.floor((flatNY - pocketNY) * 0.45);
-  const dropRows    = Math.floor(ridePhase * maxFaceDrop);
-  const surferFaceY = pocketNY + dropRows;
-
-  // Break point advances as surfer drops (wave slowly catching up)
-  const catchUp      = Math.floor(ridePhase * 2);   // 0–2 columns
-  const crashBndry   = -14 + catchUp;               // dist threshold, approaches -12
+  const catchUp  = 0;   // no dynamic advance needed with horizontal motion
+  const crashBndry = -14;
 
   // Wave surface height for any column
   // dist uses surferNX - nx (flipped) so whitewater is on the right in canvas space,
@@ -961,14 +962,8 @@ function drawScene(canvas, t) {
       ctx.fillRect(x, crestNY * PX, PX, PX);
       ctx.fillStyle = C.foam1;
       ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
-    } else if (isWhitewater) {
-      // Scattered foam dots bobbing above whitewater surface
-      const fn = ((nx * 5 + Math.floor(scrollN * 3)) % 13);
-      if (fn < 5) {
-        ctx.fillStyle = C.foam2;
-        ctx.fillRect(x, (crestNY - 1) * PX, PX, PX);
-      }
     }
+    // No foam dots above whitewater — ocean background shows through cleanly
 
     // ── Wave body from crest to bottom ────────────────────────────────────
     const startNY = (isCrashing || isPocket) ? crestNY + 2 : crestNY;
@@ -976,9 +971,9 @@ function drawScene(canvas, t) {
       const depth = ny - crestNY;
       let col;
       if (isWhitewater) {
-        // Animated foam texture — three-tone churn
-        const fn = ((nx * 7 + ny * 3 + Math.floor(scrollN * 4)) % 13);
-        col = fn < 3 ? C.foam2 : fn < 7 ? C.wwf : C.ww;
+        // Mostly dark ocean — sparse white flecks only (NOT a white wall)
+        const fn = ((nx * 7 + ny * 3 + Math.floor(scrollN * 4)) % 31);
+        col = fn < 2 ? C.foam2 : fn < 6 ? C.ww : C.mid;
       } else if (isCrashing) {
         if (depth < 3)       col = C.foam1;
         else if (depth < 8)  col = C.wface;  // transparent green face
@@ -997,13 +992,12 @@ function drawScene(canvas, t) {
   }
 
   // ── Surfer ────────────────────────────────────────────────────────────────
-  // Sprite positioned on the wave face — oscillates down/up with ride cycle
-  const spriteX = surferNX * PX - Math.floor((SPRITE_W * PX) / 2);
-  const spriteY = surferFaceY * PX - SPRITE_H * PX;
+  const spriteX   = surferNX * PX - Math.floor((SPRITE_W * PX) / 2);
+  const spriteY   = surferFaceY * PX - SPRITE_H * PX;
 
-  // Tilt: nose down when dropping, nose up when climbing, gentle wobble throughout
-  const wobble    = Math.sin(t * 0.0003) * 0.015;
-  const tiltAngle = -Math.sin(rideCycle * Math.PI * 2) * 0.07 + wobble;
+  // Gentle sway — no dramatic tilt, just a slow lazy lean
+  const wobble    = Math.sin(t * 0.0004) * 0.018;
+  const tiltAngle = wobble;
   const pivotX = spriteX + (SPRITE_W * PX) / 2;
   const pivotY = spriteY + SPRITE_H * PX;
 
