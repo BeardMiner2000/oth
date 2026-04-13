@@ -128,6 +128,7 @@ async function scrapeSpotForecast(spotSlug) {
     const periods    = row('periods');
     const winds      = row('wind');
     const windStates = row('wind-state');
+    const energy     = row('energy-maxenergy');
 
     // Ratings — try data-value attribute on inner element first, fall back to text
     const ratings = [];
@@ -135,6 +136,10 @@ async function scrapeSpotForecast(spotSlug) {
       const dv = $(el).find('[data-value]').attr('data-value') || $(el).attr('data-value');
       ratings.push(dv !== undefined ? String(dv) : $(el).text().trim());
     });
+
+    // Tides (high/low)
+    const highTides = row('high-tide');
+    const lowTides  = row('low-tide');
 
     const N = Math.min(days.length, times.length);
     if (N === 0) {
@@ -160,6 +165,10 @@ async function scrapeSpotForecast(spotSlug) {
       const ws = (windStates[i] || '').trim();
       const windState = ws ? ws.charAt(0).toUpperCase() + ws.slice(1) : '';
 
+      // Energy/power: extract number in kJ, e.g. "1200 kJ" → 1200
+      const energyMatch = (energy[i] || '').match(/(\d+)/);
+      const energyKj = energyMatch ? parseInt(energyMatch[1]) : null;
+
       result.data.push({
         timestamp:     ts,
         dayLabel:      days[i],
@@ -172,7 +181,10 @@ async function scrapeSpotForecast(spotSlug) {
         windSpeedKts:  wind.speedKts,
         windDir:       wind.direction,
         windState,
-        rating10
+        rating10,
+        energyKj,
+        highTideStr:   highTides[i] || '',
+        lowTideStr:    lowTides[i] || ''
       });
     }
 
@@ -213,7 +225,8 @@ function mergeIntervals(arrays) {
       period:       avg('period'),
       windSpeedKmh: avg('windSpeedKmh'),
       windSpeedKts: avg('windSpeedKts'),
-      rating10:     avg('rating10')
+      rating10:     avg('rating10'),
+      energyKj:     avg('energyKj')
     };
   }).sort((a, b) => a.timestamp - b.timestamp);
 }
