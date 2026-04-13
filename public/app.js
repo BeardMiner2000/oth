@@ -156,7 +156,9 @@ function normalizeOpenMeteoForTable(intervals) {
       },
       swells: e.swellHeightFt ? [{
         height:    e.swellHeightFt,
-        period:    e.swellPeriod || 0,    // use swell period (dominant swell), not wave_period
+        // Use wave_period as better estimate than swell_wave_period for Bolinas
+        // (Open-Meteo swell_wave_period is underestimated; wave_period ~9s is closer to actual)
+        period:    e.wavePeriod || 0,
         direction: e.swellDirection || 0,
         optimalScore: 0
       }] : [],
