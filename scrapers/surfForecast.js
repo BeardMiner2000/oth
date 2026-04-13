@@ -55,8 +55,18 @@ function parseSlotTimestamp(dayLabel, timeSlot) {
     if (month > 11) { month = 0; year++; }
   }
 
-  const hourMap = { AM: 6, PM: 14, Night: 22, Midnight: 0, Noon: 12 };
-  const hour = (hourMap[timeSlot] !== undefined) ? hourMap[timeSlot] : 6;
+  // Map time labels to hours: both "AM/PM/Night" and numeric times like "8 AM", "11 AM", etc.
+  const hourMap = {
+    AM: 6, PM: 14, Night: 22, Midnight: 0, Noon: 12,
+    '8 AM': 8, '11 AM': 11, '2 PM': 14, '5 PM': 17,
+    '8 PM': 20, '11 PM': 23, '2 AM': 2, '5 AM': 5
+  };
+  // Try direct lookup first, then try extracting hour from "8 AM" format
+  let hour = hourMap[timeSlot];
+  if (hour === undefined) {
+    const match = timeSlot.match(/(\d+)/);
+    hour = match ? parseInt(match[1]) : 6;
+  }
   return Math.floor(new Date(year, month, dayNum, hour, 0, 0).getTime() / 1000);
 }
 
@@ -91,7 +101,7 @@ function parseWindCell(text) {
 }
 
 /**
- * Scrape 6-day forecast for one surf-forecast.com break slug.
+ * Scrape hourly forecast for one surf-forecast.com break slug.
  * Returns: { spotSlug, data: [...], error: null|string, fetchedAt }
  *
  * Data shape per interval:
@@ -101,7 +111,7 @@ function parseWindCell(text) {
  *     rating10 }
  */
 async function scrapeSpotForecast(spotSlug) {
-  const url    = `https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest/six_day`;
+  const url    = `https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest`;
   const result = { spotSlug, data: [], error: null, fetchedAt: new Date().toISOString() };
 
   let html;
@@ -123,7 +133,7 @@ async function scrapeSpotForecast(spotSlug) {
     }
 
     const days       = row('days');
-    const times      = row('time');
+    const times      = row('time');  // Already formatted as "8 AM", "11 AM", "2 PM", etc.
     const waveRaw    = row('wave-height');
     const periods    = row('periods');
     const winds      = row('wind');
@@ -153,14 +163,17 @@ async function scrapeSpotForecast(spotSlug) {
       if (text) allLowTideTexts.push(text);
     });
 
-    const N = Math.min(days.length, times.length);
+    const N = Math.min(times.length, waveRaw.length);
     if (N === 0) {
       result.error = 'No columns found — surf-forecast.com may have changed structure';
       return result;
     }
 
     for (let i = 0; i < N; i++) {
-      const ts = parseSlotTimestamp(days[i], times[i]);
+      // Map time index to day: assume 8 times per day (3-hour intervals)
+      const dayIndex = Math.floor(i / 8);
+      const dayLabel = days[dayIndex] || days[Math.min(dayIndex, days.length - 1)];
+      const ts = parseSlotTimestamp(dayLabel, times[i]);
       if (!ts) continue;
 
       const wave = parseWaveCell(waveRaw[i] || '');
@@ -194,7 +207,7 @@ async function scrapeSpotForecast(spotSlug) {
 
       result.data.push({
         timestamp:     ts,
-        dayLabel:      days[i],
+        dayLabel:      dayLabel,
         timeSlot:      times[i],
         waveHeightM:   wave.heightM,
         waveHeightFt:  wave.heightFt,
