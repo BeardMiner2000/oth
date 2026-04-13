@@ -123,8 +123,7 @@ function render() {
 
   // Forecast table — all intervals, prefer Surfline, fall back to normalized Open-Meteo
   const tableIntervals = useSurfline ? surflineData : openMeteoNorm;
-  const tableSource    = useSurfline ? 'surfline' : 'open-meteo';
-  renderForecastTable(tableIntervals, state.forecastData.tides, tableSource);
+  renderForecastTable(tableIntervals, state.forecastData.tides);
 
   // Buoy panel
   renderBuoyPanel(state.buoyData);
@@ -136,9 +135,10 @@ function render() {
 
 // ─── Open-Meteo → Surfline-shape normalizer (fallback for forecast table) ─────
 function normalizeOpenMeteoForTable(intervals) {
-  // Open-Meteo is hourly; sample every 3 hours to match Surfline cadence
+  const nowTs = Math.floor(Date.now() / 1000);
+  // Open-Meteo is hourly; sample every 3 hours, drop past intervals
   return intervals
-    .filter((_, i) => i % 3 === 0)
+    .filter((e, i) => i % 3 === 0 && e.timestamp >= nowTs - 3600)
     .map(e => ({
       timestamp: e.timestamp,
       surf: {
@@ -545,11 +545,6 @@ function renderForecastTable(intervals, tides, source) {
 
   let html = `<pre class="forecast-table">`;
   html += `<span class="tbl-border">${escHtml(TOP)}\n</span>`;
-  if (source === 'open-meteo') {
-    const srcLabel = 'SRC: OPEN-METEO (SURFLINE UNAVAILABLE)';
-    html += `<span class="tbl-amber">║  ${pad(srcLabel, totalW - 2)}║\n</span>`;
-    html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
-  }
   html += `<span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}  ║\n</span>`;
   html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
 
