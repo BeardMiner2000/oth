@@ -536,7 +536,7 @@ function renderForecastTable(intervals, tides, source) {
   // Build ASCII table string
   const COL_DATE   = 11;
   const COL_TIME   = 6;
-  const COL_WAVES  = 10;
+  const COL_WAVES  = 13;  // "10.5-13.5 FT" = 12 chars, needs ≥1 padding
   const COL_PERIOD = 8;
   const COL_WIND   = 12;
   const COL_TIDE   = 7;
