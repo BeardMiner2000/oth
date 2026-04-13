@@ -149,7 +149,7 @@ header {
 #surf-animation {
   width: 100%;
   overflow: hidden;
-  height: 160px;
+  height: 200px;
   border: 1px solid var(--wave-dim);
   border-radius: 2px;
   margin: 0.75rem 0;

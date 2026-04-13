@@ -773,70 +773,81 @@ function updateTimestamp() {
 // Beach palette — colorblind friendly (no red/green reliance).
 
 const NES = {
-  PX:   4,     // logical pixel → screen pixel scale
-  FPS:  1.5,   // sprite animation frames per second (slow, lazy longboard feel)
+  PX:  4,    // logical pixel → screen pixel scale
+  FPS: 1.5,  // sprite animation FPS (slow, lazy longboard feel)
 };
 
-// ── Color palette (12 colors max, like an NES background palette) ──
+// ── NES-style palette — beach blues + surfer colors ──────────────────────────
 const C = {
-  sky1:   '#a8d4ee',  // pale sky
-  sky2:   '#c8e6f8',  // lighter sky horizon
+  // Sky & distant water
+  sky1:   '#a8d4ee',  // pale sky upper
+  sky2:   '#c8e6f8',  // lighter sky near horizon
   horiz:  '#5a9ec8',  // horizon line
   far:    '#2e78b0',  // far ocean
-  mid:    '#1e5a90',  // mid-distance ocean
-  face:   '#1a4878',  // wave face (steep blue wall)
-  deep:   '#0e2e50',  // deep/trough water
-  crest:  '#6ab4dc',  // wave crest, lighter
-  foam1:  '#b8daf2',  // foam light
-  foam2:  '#e8f4fc',  // foam bright
-  ww:     '#82b8d8',  // whitewater behind break
-  // surfer
-  hair:   '#2c1a10',
+  mid:    '#1e5a90',  // mid-distance water
+  // Wave face
+  wface:  '#1a6e60',  // transparent green-blue (classic clean face)
+  deep:   '#0e2e50',  // deep trough
+  // Foam & whitewater
+  foam2:  '#eef8ff',  // bright white foam
+  foam1:  '#b8daf2',  // light foam
+  spray:  '#ddeeff',  // fine mist/spray
+  ww:     '#4e80b0',  // whitewater base
+  wwf:    '#88b8d8',  // whitewater foam
+  // Surfer — bald guy with gray beard
+  bald:   '#d4956a',  // sun-beaten bald pate
   skin:   '#e8b468',  // warm golden skin
-  suit:   '#1e4880',  // wetsuit ocean blue
+  beard:  '#a8a8a4',  // gray beard
+  beardD: '#787874',  // beard shadow
+  suit:   '#1e4880',  // wetsuit blue
   suitD:  '#142e58',  // dark wetsuit shadow
   board:  '#e8cc3a',  // yellow longboard
-  boardD: '#b89820',  // board rail
+  boardD: '#b89820',  // board rail/shadow
   wax:    '#f0ead8',  // deck wax / feet
 };
 
-// ── Surfer sprite: 2 frames, 10×12 logical pixels ──
-// Each row = array of color keys (null = transparent)
+// ── Surfer sprite: 2 frames, 10×14 logical pixels ────────────────────────────
+// Bald head, big gray beard, noseriding — left-facing profile.
+// Nose of board is on the LEFT (direction of wave travel).
 const FRAMES = [
-  // Frame 0 — arms wide, classic trim pose
+  // Frame 0 — arms spread wide, classic noserider balance
   [
-    [null,null,'hair','hair','hair',null,null,null,null,null],
-    [null,'hair','skin','skin','skin','hair',null,null,null,null],
-    [null,null,'skin','skin','suitD',null,null,null,null,null],
-    [null,'suitD','suit','suit','suit','suitD',null,null,null,null],
-    ['skin','suit','suit','suit','suit','suit','skin',null,null,null],
-    [null,null,'suit','suit','suit','suit',null,null,null,null],
-    [null,null,'suit','suit','suit',null,null,null,null,null],
-    [null,'suitD','suit',null,'suit','suitD',null,null,null,null],
-    [null,'suit','suit',null,'suit','suit',null,null,null,null],
-    [null,'wax','wax',null,'wax','wax',null,null,null,null],
-    ['boardD','board','board','board','board','board','board','board','board','boardD'],
-    [null,'boardD','board','board','board','board','board','board','boardD',null],
+    [null, 'bald','bald','bald', null,  null,  null, null, null, null],
+    ['bald','bald','bald','bald','bald', null,  null, null, null, null],
+    ['skin','skin','skin','skin','bald', null,  null, null, null, null],
+    ['beard','beard','skin','suit', null,  null,  null, null, null, null],
+    ['beard','beard','beard','suit','suit', null,  null, null, null, null],
+    ['beard','beard','suit','suit','suit','suit', null, null, null, null],
+    [null, 'suit','suit','suit','suit','suit', null, null, null, null],
+    ['skin','suit','suit','suit','suit', null, 'skin', null, null, null],
+    [null,  null, 'suit','suit','suit', null,  null, null, null, null],
+    [null, 'suitD','suit','suitD', null,  null,  null, null, null, null],
+    ['suitD','suit', null, 'suit', null,  null,  null, null, null, null],
+    ['wax', 'wax',  null, 'wax',  null,  null,  null, null, null, null],
+    ['board','board','board','board','board','board','board','board','board','boardD'],
+    [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD', null],
   ],
-  // Frame 1 — slight weight shift forward, still cruising
+  // Frame 1 — slight weight shift, arms lift a hair
   [
-    [null,null,null,'hair','hair','hair',null,null,null,null],
-    [null,null,'hair','skin','skin','skin','hair',null,null,null],
-    [null,null,'skin','skin','skin','suitD',null,null,null,null],
-    [null,null,'suitD','suit','suit','suit','suitD',null,null,null],
-    ['skin',null,'suit','suit','suit','suit',null,'skin',null,null],
-    [null,null,null,'suit','suit','suit','suit',null,null,null],
-    [null,null,null,'suit','suit','suit',null,null,null,null],
-    [null,null,'suitD','suit',null,'suit',null,null,null,null],
-    [null,null,'suit','suit',null,'suit','suit',null,null,null],
-    [null,null,'wax','wax',null,'wax','wax',null,null,null],
-    ['boardD','board','board','board','board','board','board','board','board','boardD'],
-    [null,'boardD','board','board','board','board','board','board','boardD',null],
+    [null, 'bald','bald','bald', null,  null,  null, null, null, null],
+    ['bald','bald','bald','bald','bald', null,  null, null, null, null],
+    ['skin','skin','skin','skin','bald', null,  null, null, null, null],
+    ['beard','beard','skin','suit', null,  null,  null, null, null, null],
+    ['beard','beard','beard','suit','suit', null,  null, null, null, null],
+    ['beard','suit','suit','suit','suit','suit', null, null, null, null],
+    [null, 'suit','suit','suit','suit','suit', null, null, null, null],
+    [null, 'skin','suit','suit','suit','suit','skin', null, null, null],
+    [null,  null, 'suit','suit','suit', null,  null, null, null, null],
+    [null, 'suitD','suit','suitD', null,  null,  null, null, null, null],
+    ['suitD','suit', null, 'suit', null,  null,  null, null, null, null],
+    ['wax', 'wax',  null, 'wax',  null,  null,  null, null, null, null],
+    ['board','board','board','board','board','board','board','board','board','boardD'],
+    [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD', null],
   ],
 ];
 
-const SPRITE_W = 10;   // logical pixels
-const SPRITE_H = 12;
+const SPRITE_W = 10;
+const SPRITE_H = 14;
 
 function drawSprite(ctx, frame, x, y) {
   const rows = FRAMES[frame % FRAMES.length];
@@ -860,85 +871,139 @@ function drawScene(canvas, t) {
   const W  = canvas.width;
   const H  = canvas.height;
   const PX = NES.PX;
-
-  // Logical grid size
   const NW = Math.ceil(W / PX);
   const NH = Math.ceil(H / PX);
 
-  // Wave scrolls slowly left — longboard wave speed (~12s per full cycle)
-  const scrollPx = (t * 0.000083) % 1; // 0–1 fractional scroll per cycle
+  // Slow scroll for ripple/foam animation (~12s per full cycle)
+  const scrollPx = (t * 0.000083) % 1;
   const scrollN  = Math.floor(scrollPx * NW);
 
-  // ── Sky ──────────────────────────────────────────────────────────────────
+  // Surfer locked in the pocket at 40% from left
+  const surferNX = Math.floor(NW * 0.40);
+
+  // Wave profile heights (logical Y — smaller = higher on screen)
+  const pocketNY = Math.floor(NH * 0.50);  // tallest point (pocket)
+  const wwNY     = Math.floor(NH * 0.62);  // already-broken whitewater surface
+  const flatNY   = NH - 4;                 // flat outside swell
+
+  // Wave surface for any column (relative to surfer)
+  function waveSurface(nx) {
+    const dist = nx - surferNX;
+    if (dist < -14) {
+      // Whitewater — flat, already broken
+      return wwNY;
+    } else if (dist < -1) {
+      // Crashing/pitching zone — rises sharply to pocket height
+      const frac = (dist + 14) / 13;
+      return Math.round(wwNY - (wwNY - pocketNY) * frac);
+    } else if (dist <= 2) {
+      // Pocket — maximum height
+      return pocketNY;
+    } else if (dist <= 22) {
+      // Shoulder — gracefully flattens out
+      const frac = Math.min(1, (dist - 2) / 20);
+      return Math.round(pocketNY + (flatNY - pocketNY) * frac);
+    } else {
+      return flatNY;
+    }
+  }
+
+  // ── Background ────────────────────────────────────────────────────────────
+  // Fill ocean blue, then paint sky & horizon on top
+  ctx.fillStyle = C.mid;
+  ctx.fillRect(0, 0, W, H);
+
   for (let y = 0; y < 5; y++) {
     ctx.fillStyle = y < 3 ? C.sky2 : C.sky1;
     ctx.fillRect(0, y * PX, W, PX);
   }
-  // Horizon strip
   ctx.fillStyle = C.horiz;
   ctx.fillRect(0, 5 * PX, W, PX);
-  // Far ocean
-  for (let y = 6; y < 9; y++) {
-    ctx.fillStyle = y < 8 ? C.far : C.mid;
-    ctx.fillRect(0, y * PX, W, PX);
-  }
+  ctx.fillStyle = C.far;
+  ctx.fillRect(0, 6 * PX, W, 3 * PX);
 
-  // ── Wave ─────────────────────────────────────────────────────────────────
-  // For each column, compute where the wave surface is (logical Y).
-  // Two sine waves at different frequencies give a realistic rolling swell.
+  // ── Wave columns ──────────────────────────────────────────────────────────
   for (let nx = 0; nx < NW; nx++) {
-    const phase = ((nx + scrollN) % NW) / NW; // 0–1
-    const θ = phase * Math.PI * 2;
+    const dist     = nx - surferNX;
+    const crestNY  = waveSurface(nx);
+    const x        = nx * PX;
 
-    // Crest height: primary swell + secondary ripple
-    const crestNY = 9
-      + Math.floor(Math.sin(θ * 1.0) * 2.2)
-      + Math.floor(Math.sin(θ * 2.3 + 0.8) * 0.9);
+    const isWhitewater = dist < -14;
+    const isCrashing   = dist >= -14 && dist < -1;
+    const isPocket     = dist >= -1 && dist <= 2;
 
-    const x = nx * PX;
+    // ── Pitching lip arch — white pixels curling above crest in crash zone ──
+    if (isCrashing && dist > -9) {
+      const archH = Math.max(0, Math.floor((dist + 9) / 2));
+      ctx.fillStyle = C.foam2;
+      ctx.fillRect(x, (crestNY - archH) * PX, PX, PX);
+    }
 
-    // Foam at crest (2 px tall)
-    ctx.fillStyle = C.foam2;
-    ctx.fillRect(x, crestNY * PX, PX, PX);
-    ctx.fillStyle = C.foam1;
-    ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
+    // ── Flying spray above the crashing section ───────────────────────────
+    if (isCrashing && dist > -11) {
+      const intensity = 1 - Math.abs(dist + 5) / 6;
+      const rows = Math.ceil(intensity * 3);
+      for (let sy = 1; sy <= rows; sy++) {
+        const n = ((nx * 3 + sy * 7 + Math.floor(scrollN * 2.5)) % 9);
+        if (n < 4) {
+          ctx.fillStyle = n < 2 ? C.foam2 : C.spray;
+          ctx.fillRect(x, (crestNY - sy) * PX, PX, PX);
+        }
+      }
+    }
 
-    // Wave face below crest — color darkens with depth
-    for (let ny = crestNY + 2; ny < NH; ny++) {
+    // ── Crest / lip foam ──────────────────────────────────────────────────
+    if (isCrashing || isPocket) {
+      ctx.fillStyle = dist < -6 ? C.foam2 : '#ffffff';
+      ctx.fillRect(x, crestNY * PX, PX, PX);
+      ctx.fillStyle = C.foam1;
+      ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
+    } else if (isWhitewater) {
+      // Scattered foam dots bobbing above whitewater surface
+      const fn = ((nx * 5 + Math.floor(scrollN * 3)) % 13);
+      if (fn < 5) {
+        ctx.fillStyle = C.foam2;
+        ctx.fillRect(x, (crestNY - 1) * PX, PX, PX);
+      }
+    }
+
+    // ── Wave body from crest to bottom ────────────────────────────────────
+    const startNY = (isCrashing || isPocket) ? crestNY + 2 : crestNY;
+    for (let ny = startNY; ny < NH; ny++) {
       const depth = ny - crestNY;
       let col;
-      if (depth < 3)       col = C.crest;
-      else if (depth < 7)  col = C.mid;
-      else if (depth < 13) col = C.face;
-      else                 col = C.deep;
+      if (isWhitewater) {
+        // Animated foam texture — three-tone churn
+        const fn = ((nx * 7 + ny * 3 + Math.floor(scrollN * 4)) % 13);
+        col = fn < 3 ? C.foam2 : fn < 7 ? C.wwf : C.ww;
+      } else if (isCrashing) {
+        if (depth < 3)       col = C.foam1;
+        else if (depth < 8)  col = C.wface;  // transparent green face
+        else if (depth < 14) col = C.mid;
+        else                 col = C.deep;
+      } else {
+        // Shoulder / pocket — clean unbroken face
+        if (depth === 0)     col = C.foam1;
+        else if (depth < 6)  col = C.wface;
+        else if (depth < 13) col = C.mid;
+        else                 col = C.deep;
+      }
       ctx.fillStyle = col;
       ctx.fillRect(x, ny * PX, PX, PX);
     }
-
-    // Whitewater scatter just behind the break (right 35% of screen)
-    if (nx > NW * 0.62) {
-      const wwPhase = ((nx - Math.floor(NW * 0.62) + scrollN * 2) % NW) / NW;
-      if (Math.sin(wwPhase * Math.PI * 8) > 0.5) {
-        ctx.fillStyle = C.ww;
-        ctx.fillRect(x, (crestNY + 1) * PX, PX, PX * 2);
-      }
-    }
   }
 
-  // ── Surfer — locked in the pocket at ~30% from left ──────────────────────
-  const surferNX = Math.floor(NW * 0.30);
-  const surferPhase = ((surferNX + scrollN) % NW) / NW;
-  const surferTheta = surferPhase * Math.PI * 2;
-  const surfaceNY = 9
-    + Math.floor(Math.sin(surferTheta * 1.0) * 2.2)
-    + Math.floor(Math.sin(surferTheta * 2.3 + 0.8) * 0.9);
+  // ── Surfer ────────────────────────────────────────────────────────────────
+  const surfaceNY = waveSurface(surferNX);   // = pocketNY (flat in the pocket)
 
-  // Position sprite so board bottom sits on wave surface
+  // Board rail (row 13 of sprite) aligns with wave surface
   const spriteX = surferNX * PX - Math.floor((SPRITE_W * PX) / 2);
   const spriteY = (surfaceNY + 1) * PX - SPRITE_H * PX;
 
-  // Slight board tilt — rotate around the board's center
-  const tiltAngle = (Math.sin(surferTheta * 1.0) * 2.2 - Math.sin((surferTheta + 0.1) * 1.0) * 2.2) * 0.04;
+  // Subtle sway (slope is ~0 in pocket, so add a gentle wobble)
+  const slope = waveSurface(surferNX + 2) - waveSurface(surferNX - 2);
+  const wobble = Math.sin(t * 0.0003) * 0.018;
+  const tiltAngle = slope * 0.035 + wobble;
   const pivotX = spriteX + (SPRITE_W * PX) / 2;
   const pivotY = spriteY + SPRITE_H * PX;
 
