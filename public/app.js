@@ -520,58 +520,52 @@ function buildStokeMeter(score) {
   return `[ ${bar} ] ${score}%`;
 }
 
-// ─── Render: Surf-Forecast.com Section ────────────────────────────────────────
+// ─── Render: Surf-Forecast.com Section (The Patch daily summary) ────────────
 function renderSurfForecastSection(sfData) {
   const wrap = document.getElementById('sf-wrap');
   if (!wrap) return;
 
-  if (!sfData || sfData.error || !sfData.data || sfData.data.length === 0) {
+  if (!sfData || !sfData.individual || sfData.individual.length === 0 || sfData.error) {
     wrap.innerHTML = '';
     return;
   }
 
-  const rows = sfData.data.slice(0, 18); // cap at 18 (3 per day × 6 days)
-  let html = `<div class="section-header" style="margin-top:1rem">▶ SURF-FORECAST.COM (PATCH + JETTY MERGED)</div>`;
-  html += `<pre class="forecast-table">`;
+  // Use The Patch data (first individual break)
+  const patchData = sfData.individual[0]?.data || [];
+  if (!patchData || patchData.length === 0) {
+    wrap.innerHTML = '';
+    return;
+  }
 
-  const COL_T = 10, COL_W = 9, COL_P = 6, COL_WN = 11, COL_R = 7;
-  const tw = COL_T + COL_W + COL_P + COL_WN + COL_R + 12;
-  function pad(s, n) { const str = String(s); return str.length >= n ? str.slice(0,n) : str + ' '.repeat(n - str.length); }
-
-  html += `<span class="tbl-border">╔${'═'.repeat(tw)}╗\n</span>`;
-  html += `<span class="tbl-header">║  ${pad('TIME',COL_T)}${pad('WAVES',COL_W)}${pad('PERIOD',COL_P)}${pad('WIND',COL_WN)}${pad('RATING',COL_R)}  ║\n</span>`;
-  html += `<span class="tbl-border">╠${'═'.repeat(tw)}╣\n</span>`;
-
-  rows.forEach(r => {
-    // Format time cleanly: "Mon 13 AM" or "Tue 14 PM"
-    const dayShort = (r.dayLabel || '').split(' ')[0] || '?';
-    const dayNum = (r.dayLabel || '').match(/\d+/)?.[0] || '';
-    const timeStr = `${dayShort} ${dayNum} ${(r.timeSlot || '').substring(0, 2)}`;
-
-    // Round wave height to 1 decimal
-    const wFt = r.waveHeightFt ? Math.round(r.waveHeightFt * 2) / 2 : 0;
-    const wStr = wFt > 0 ? `${wFt}FT` : '---';
-
-    // Round period to integer
-    const pStr = r.period ? `${Math.round(r.period)}s` : '---';
-
-    // Wind: direction + speed
-    const wStr2 = r.windSpeedKts && r.windDir ? `${r.windDir} ${Math.round(r.windSpeedKts)}kt` : '---';
-
-    // Stars: convert 0-10 to 0-5
-    const stars = Math.round((r.rating10 || 0) / 2);
-    const starsStr = '★'.repeat(Math.min(stars,5)) + '☆'.repeat(Math.max(0,5-stars));
-    const cls = stars >= 3 ? 'tbl-good' : stars >= 2 ? 'tbl-data' : 'tbl-swim';
-
-    html += `<span class="tbl-border">║</span>`;
-    html += `<span class="tbl-data">  ${pad(timeStr, COL_T)}`;
-    html += `</span><span class="${cls}">${pad(wStr, COL_W)}</span>`;
-    html += `<span class="tbl-data">${pad(pStr, COL_P)}${pad(wStr2, COL_WN)}</span>`;
-    html += `<span class="tbl-data">${pad(starsStr, COL_R)}  </span>`;
-    html += `<span class="tbl-border">║\n</span>`;
+  // Group by day
+  const byDay = {};
+  patchData.forEach(interval => {
+    const day = interval.dayLabel || 'Unknown';
+    if (!byDay[day]) byDay[day] = [];
+    byDay[day].push(interval);
   });
 
-  html += `<span class="tbl-border">╚${'═'.repeat(tw)}╝\n</span>`;
+  let html = `<div class="section-header" style="margin-top:1rem">▶ SURF-FORECAST.COM "THE PATCH"</div>`;
+  html += `<pre class="forecast-table">`;
+
+  Object.entries(byDay).forEach(([dayLabel, intervals]) => {
+    // Find best time (highest rating)
+    let best = intervals[0];
+    intervals.forEach(i => {
+      if ((i.rating10 || 0) > (best.rating10 || 0)) best = i;
+    });
+
+    const bestTime = best.timeSlot || '?';
+    const bestWaves = best.waveHeightFt ? Math.round(best.waveHeightFt * 2) / 2 : 0;
+    const bestPeriod = best.period ? Math.round(best.period) : 0;
+    const bestRating = Math.round((best.rating10 || 0) / 2);
+    const stars = '★'.repeat(bestRating) + '☆'.repeat(5 - bestRating);
+    const tideInfo = best.highTideStr || best.lowTideStr || '';
+
+    const cls = bestRating >= 3 ? 'tbl-good' : bestRating >= 2 ? 'tbl-data' : 'tbl-swim';
+    html += `<span class="${cls}">  ${dayLabel.padEnd(14)} ${bestTime.padEnd(8)} ${String(bestWaves).padEnd(6)}FT ${String(bestPeriod).padEnd(3)}s ${stars}\n</span>`;
+  });
+
   html += `</pre>`;
   wrap.innerHTML = html;
 }

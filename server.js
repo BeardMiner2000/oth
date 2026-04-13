@@ -105,7 +105,7 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
     }));
 
     // Fetch surf-forecast.com — supports single slug or array (merge multiple breaks)
-    let sfData = { data: [], error: null };
+    let sfData = { data: [], individual: [], error: null };
     const sfSlugs = surfForecast.SURF_FORECAST_SLUGS[spotKey];
     if (sfSlugs) {
       try {
@@ -115,12 +115,14 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
         );
         const successful = sfResults
           .filter(r => r.status === 'fulfilled' && r.value.data.length > 0)
-          .map(r => r.value.data);
+          .map(r => r.value);
         if (successful.length > 0) {
+          const successfulData = successful.map(s => s.data);
           sfData = {
-            data:      surfForecast.mergeIntervals(successful),
-            error:     null,
-            fetchedAt: new Date().toISOString()
+            data:       surfForecast.mergeIntervals(successfulData),
+            individual: successful,  // keep individual break data for display
+            error:      null,
+            fetchedAt:  new Date().toISOString()
           };
         } else {
           const firstErr = sfResults.find(r => r.status === 'rejected' || r.value.error);
