@@ -570,8 +570,11 @@ function renderSurfForecastSection(sfData) {
     const allLowTides = new Set();
     const allHighTides = new Set();
     intervals.forEach(i => {
-      if (i.lowTideTime && i.lowTideTime !== '---') allLowTides.add(i.lowTideTime);
-      if (i.highTideTime && i.highTideTime !== '---') allHighTides.add(i.highTideTime);
+      // Handle both single time (old format) and array of times (new format)
+      const lowTimes = Array.isArray(i.lowTideTimes) ? i.lowTideTimes : (i.lowTideTime ? [i.lowTideTime] : []);
+      const highTimes = Array.isArray(i.highTideTimes) ? i.highTideTimes : (i.highTideTime ? [i.highTideTime] : []);
+      lowTimes.forEach(t => { if (t && t !== '---') allLowTides.add(t); });
+      highTimes.forEach(t => { if (t && t !== '---') allHighTides.add(t); });
     });
 
     const lowTimes = Array.from(allLowTides).sort();

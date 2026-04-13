@@ -137,9 +137,21 @@ async function scrapeSpotForecast(spotSlug) {
       ratings.push(dv !== undefined ? String(dv) : $(el).text().trim());
     });
 
-    // Tides (high/low)
+    // Tides (high/low) — collect all text from cells, may have multiple per cell
     const highTides = row('high-tide');
     const lowTides  = row('low-tide');
+
+    // Also try collecting from cell contents in case multiple tides are shown
+    const allHighTideTexts = [];
+    $('tr[data-row-name="high-tide"] td').each((_, el) => {
+      const text = $(el).text().trim();
+      if (text) allHighTideTexts.push(text);
+    });
+    const allLowTideTexts = [];
+    $('tr[data-row-name="low-tide"] td').each((_, el) => {
+      const text = $(el).text().trim();
+      if (text) allLowTideTexts.push(text);
+    });
 
     const N = Math.min(days.length, times.length);
     if (N === 0) {
@@ -169,11 +181,15 @@ async function scrapeSpotForecast(spotSlug) {
       const energyMatch = (energy[i] || '').match(/(\d+)/);
       const energyKj = energyMatch ? parseInt(energyMatch[1]) : null;
 
-      // Parse tide times: "8:54 AM 1.0" or similar → extract "8:54 AM"
-      function parseTideTime(tideStr) {
-        if (!tideStr) return null;
-        const match = tideStr.match(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?)/i);
-        return match ? match[1].trim() : null;
+      // Parse tide times: "8:54 AM 1.0" or similar → extract all times
+      function parseTideTimes(tideStr) {
+        if (!tideStr) return [];
+        const times = [];
+        const matches = tideStr.matchAll(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?)/gi);
+        for (const match of matches) {
+          times.push(match[1].trim());
+        }
+        return times;
       }
 
       result.data.push({
@@ -190,8 +206,8 @@ async function scrapeSpotForecast(spotSlug) {
         windState,
         rating10,
         energyKj,
-        highTideTime:  parseTideTime(highTides[i]),
-        lowTideTime:   parseTideTime(lowTides[i])
+        highTideTimes: parseTideTimes(highTides[i]),  // array of times
+        lowTideTimes:  parseTideTimes(lowTides[i])    // array of times
       });
     }
 
