@@ -912,38 +912,40 @@ function drawScene(canvas, t) {
   // Visual position: starts ~22% from left, reaches ~66% from left, then resets.
 
   // Subtle bob — ±1 row only
-  const bob         = Math.round(Math.sin(t * 0.0009) * 1);
-  // Surfer rides the face (below the crest), not sitting on top of the peak
-  const faceNY      = Math.floor(NH * 0.60);           // surfer position on face
-  const crestNY     = Math.floor(NH * 0.35);           // wave crest (ahead of surfer)
-  const wwNY        = Math.floor(NH * 0.62);           // broken water level behind
-  const flatNY      = NH - 4;
+  const bob      = Math.round(Math.sin(t * 0.0009) * 1);
+  // Wave peak is BEHIND the surfer (negative dist = screen-left).
+  // Surfer rides the right face — the downslope past the peak.
+  const peakNY   = Math.floor(NH * 0.33);   // wave peak height
+  const faceNY   = Math.floor(NH * 0.58);   // surfer's position on right face
+  const wwNY     = Math.floor(NH * 0.66);   // settled whitewater level (left of peak)
+  const flatNY   = NH - 4;
+  const peakDist = -10;                      // peak is 10 cols behind surfer
+  const wwBndry  = peakDist - 10;           // whitewater starts 10 cols left of peak
   const surferFaceY = faceNY + bob;
-  const crashBndry  = -5;                              // small break zone, then slope
 
   // Wave surface height for any canvas column.
-  // dist = surferNX - nx: positive = ahead of surfer (unbroken), negative = behind (broken).
-  // After horizontal mirror: positive dist → screen-right (ahead), negative → screen-left (behind).
+  // dist = surferNX - nx: positive = to surfer's right on screen (open shoulder),
+  //                       negative = to surfer's left on screen (broken, behind).
   function waveSurface(nx) {
     const dist = surferNX - nx;
-    if (dist < crashBndry) {
-      // Behind surfer: broken section fades gracefully to flat — NO flat rectangle
-      const beyond = Math.min(1, (crashBndry - dist) / 18);
+    if (dist < wwBndry) {
+      // Far left: settled broken water, slopes to flat
+      const beyond = Math.min(1, (wwBndry - dist) / 14);
       return Math.round(wwNY + (flatNY - wwNY) * beyond);
+    } else if (dist < peakDist) {
+      // Left of peak: wave face rising toward peak
+      const frac = (dist - wwBndry) / (peakDist - wwBndry);
+      return Math.round(wwNY - (wwNY - peakNY) * frac);
     } else if (dist < 0) {
-      // Just behind: broken face, from wwNY up to faceNY
-      const frac = (dist - crashBndry) / (-crashBndry);
-      return Math.round(wwNY - (wwNY - faceNY) * frac);
+      // Right face of peak down to surfer level (surfer on the right slope)
+      const frac = (dist - peakDist) / (-peakDist);
+      return Math.round(peakNY + (faceNY - peakNY) * frac);
     } else if (dist <= 3) {
-      return faceNY;                                   // at surfer: mid-face
-    } else if (dist <= 13) {
-      // Face rises to crest ahead of the surfer
-      const frac = (dist - 3) / 10;
-      return Math.round(faceNY - (faceNY - crestNY) * frac);
-    } else if (dist <= 34) {
-      // Back shoulder slopes down from crest to flat
-      const frac = (dist - 13) / 21;
-      return Math.round(crestNY + (flatNY - crestNY) * frac);
+      return faceNY;                         // at surfer
+    } else if (dist <= 26) {
+      // Open shoulder: gentle slope back to flat
+      const frac = (dist - 3) / 23;
+      return Math.round(faceNY + (flatNY - faceNY) * frac);
     } else {
       return flatNY;
     }
@@ -974,26 +976,27 @@ function drawScene(canvas, t) {
     const crestNY  = waveSurface(nx);
     const x        = nx * PX;
 
-    // dist < 0 = behind surfer (broken), dist > 0 = ahead (unbroken)
-    const isWhitewater = dist < crashBndry;             // far behind, settled
-    const isCrashing   = dist >= crashBndry && dist < 0; // just broken, behind surfer
-    const isOnFace     = dist >= 0 && dist <= 3;        // at surfer's position
-    const isCrest      = dist > 3 && dist <= 15;        // rising to crest ahead
+    // Zone classification based on position relative to peak and surfer
+    const isWhitewater = dist < wwBndry;                           // far left, settled
+    const isLeftFace   = dist >= wwBndry && dist < peakDist;       // wave rising to peak
+    const atPeak       = dist >= peakDist && dist < peakDist + 4;  // peak/breaking zone
+    const isRightFace  = dist >= peakDist + 4 && dist <= 3;        // clean right face (surfer's side)
+    const isShoulder   = dist > 3;                                 // open shoulder ahead
 
-    // ── Foam at the wave crest (ahead of surfer, just before it breaks) ──
-    if (isCrest && dist >= 13) {
+    // ── Lip foam at the peak (behind surfer, wave breaking there) ────────
+    if (atPeak) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(x, crestNY * PX, PX, PX);
       ctx.fillStyle = C.foam1;
       ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
     }
 
-    // ── Spray just behind the surfer (where wave breaks) ─────────────────
-    if (isCrashing && dist >= -3) {
-      for (let sy = 1; sy <= 2; sy++) {
-        const n = ((nx * 5 + sy * 11 + Math.floor(scrollN * 3)) % 7);
-        if (n < 3) {
-          ctx.fillStyle = n < 1 ? C.foam2 : C.spray;
+    // ── Spray above the peak ──────────────────────────────────────────────
+    if (atPeak && dist >= peakDist && dist < peakDist + 3) {
+      for (let sy = 1; sy <= 3; sy++) {
+        const n = ((nx * 5 + sy * 11 + Math.floor(scrollN * 3)) % 9);
+        if (n < 4) {
+          ctx.fillStyle = n < 2 ? C.foam2 : C.spray;
           ctx.fillRect(x, (crestNY - sy) * PX, PX, PX);
         }
       }
@@ -1004,18 +1007,19 @@ function drawScene(canvas, t) {
       const depth = ny - crestNY;
       let col;
       if (isWhitewater) {
-        // Already broken — sparse flecks, mostly ocean color
+        // Settled — sparse flecks, mostly dark ocean
         const fn = ((nx * 7 + ny * 3 + Math.floor(scrollN * 4)) % 31);
         col = fn < 2 ? C.foam1 : fn < 5 ? C.ww : C.mid;
-      } else if (isCrashing) {
+      } else if (atPeak || isLeftFace) {
+        // Breaking / steep left face
         if (depth < 2)       col = C.foam1;
-        else if (depth < 7)  col = C.wface;
-        else if (depth < 13) col = C.mid;
+        else if (depth < 8)  col = C.wface;
+        else if (depth < 14) col = C.mid;
         else                 col = C.deep;
       } else {
-        // Clean unbroken face — green-blue and deep
-        if (depth < 2)       col = C.wface;
-        else if (depth < 9)  col = C.mid;
+        // Clean right face / shoulder — surfer's side
+        if (depth < 3)       col = C.wface;
+        else if (depth < 10) col = C.mid;
         else                 col = C.deep;
       }
       ctx.fillStyle = col;
