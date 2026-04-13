@@ -520,7 +520,7 @@ function buildStokeMeter(score) {
   return `[ ${bar} ] ${score}%`;
 }
 
-// ─── Render: Surf-Forecast.com Section (The Patch daily summary) ────────────
+// ─── Render: Surf-Forecast.com Section (The Patch daily tide summary) ────────
 function renderSurfForecastSection(sfData) {
   const wrap = document.getElementById('sf-wrap');
   if (!wrap) return;
@@ -537,7 +537,7 @@ function renderSurfForecastSection(sfData) {
     return;
   }
 
-  // Helper: find interval closest to a time slot (AM/PM/Night)
+  // Helper: find interval closest to a time slot
   function findIntervalForTide(intervals, tideTime) {
     if (!tideTime || !intervals.length) return null;
     const hour = parseInt(tideTime.match(/\d+/)?.[0] || 0);
@@ -562,34 +562,41 @@ function renderSurfForecastSection(sfData) {
     byDay[day].push(interval);
   });
 
-  let html = `<div class="section-header" style="margin-top:1rem">▶ SURF-FORECAST.COM "THE PATCH"</div>`;
+  let html = `<div class="section-header" style="margin-top:1rem">▶ SURF-FORECAST.COM "THE PATCH" — TIDE TIMES</div>`;
   html += `<pre class="forecast-table">`;
 
   Object.entries(byDay).forEach(([dayLabel, intervals]) => {
-    // Get first interval to extract tide times
-    const sample = intervals[0];
-    const lowTideTime = sample.lowTideTime || '---';
-    const highTideTime = sample.highTideTime || '---';
+    // Collect all unique tide times from all intervals that day
+    const allLowTides = new Set();
+    const allHighTides = new Set();
+    intervals.forEach(i => {
+      if (i.lowTideTime && i.lowTideTime !== '---') allLowTides.add(i.lowTideTime);
+      if (i.highTideTime && i.highTideTime !== '---') allHighTides.add(i.highTideTime);
+    });
 
-    // Find conditions at each tide
-    const lowInterval = findIntervalForTide(intervals, lowTideTime);
-    const highInterval = findIntervalForTide(intervals, highTideTime);
+    const lowTimes = Array.from(allLowTides).sort();
+    const highTimes = Array.from(allHighTides).sort();
 
-    function formatTideInfo(interval, tideTime) {
-      if (!interval || !tideTime || tideTime === '---') return '--- ---    ☆☆☆☆☆';
-      const w = interval.waveHeightFt ? Math.round(interval.waveHeightFt * 2) / 2 : 0;
-      const r = Math.round((interval.rating10 || 0) / 2);
-      const stars = '★'.repeat(r) + '☆'.repeat(5 - r);
-      return `${tideTime.padEnd(7)} ${String(w)}FT ${stars}`;
+    // Format each tide
+    function formatTide(tideTime) {
+      const interval = findIntervalForTide(intervals, tideTime);
+      if (!interval) return `${tideTime} --- ☆☆☆`;
+      const energy = interval.energyKj ? `${Math.round(interval.energyKj/100)}00kJ` : '---';
+      const stoke = Math.round((interval.rating10 || 0) / 2);
+      const stars = '★'.repeat(stoke) + '☆'.repeat(5 - stoke);
+      return `${tideTime.padEnd(8)} ${energy.padEnd(6)} ${stars}`;
     }
 
-    const lowInfo = formatTideInfo(lowInterval, lowTideTime);
-    const highInfo = formatTideInfo(highInterval, highTideTime);
+    const tideLines = [];
+    lowTimes.forEach(t => {
+      tideLines.push(`L ${formatTide(t)}`);
+    });
+    highTimes.forEach(t => {
+      tideLines.push(`H ${formatTide(t)}`);
+    });
+    const tideLine = tideLines.join('  |  ');
 
-    const lowRating = lowInterval ? Math.round((lowInterval.rating10 || 0) / 2) : 0;
-    const cls = lowRating >= 3 ? 'tbl-good' : lowRating >= 2 ? 'tbl-data' : 'tbl-swim';
-
-    html += `<span class="${cls}">  ${dayLabel.padEnd(12)}  LOW ${lowInfo}  |  HIGH ${highInfo}\n</span>`;
+    html += `<span class="tbl-data">  ${dayLabel.padEnd(11)} ${tideLine}\n</span>`;
   });
 
   html += `</pre>`;
