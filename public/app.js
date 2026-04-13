@@ -530,36 +530,44 @@ function renderSurfForecastSection(sfData) {
     return;
   }
 
-  const rows = sfData.data.slice(0, 24); // cap at 24 entries
-  let html = `<div class="section-header" style="margin-top:1rem">▶ SURF-FORECAST.COM // CROSS-REFERENCE (PATCH + JETTY MERGED)</div>`;
+  const rows = sfData.data.slice(0, 18); // cap at 18 (3 per day × 6 days)
+  let html = `<div class="section-header" style="margin-top:1rem">▶ SURF-FORECAST.COM (PATCH + JETTY MERGED)</div>`;
   html += `<pre class="forecast-table">`;
 
-  const COL_T = 12, COL_W = 12, COL_P = 7, COL_WN = 12, COL_E = 9, COL_R = 8, COL_TD = 10;
-  const tw = COL_T + COL_W + COL_P + COL_WN + COL_E + COL_R + COL_TD + 18;
+  const COL_T = 10, COL_W = 9, COL_P = 6, COL_WN = 11, COL_R = 7;
+  const tw = COL_T + COL_W + COL_P + COL_WN + COL_R + 12;
   function pad(s, n) { const str = String(s); return str.length >= n ? str.slice(0,n) : str + ' '.repeat(n - str.length); }
 
   html += `<span class="tbl-border">╔${'═'.repeat(tw)}╗\n</span>`;
-  html += `<span class="tbl-header">║  ${pad('TIME',COL_T)}${pad('WAVES',COL_W)}${pad('PERIOD',COL_P)}${pad('WIND',COL_WN)}${pad('ENERGY',COL_E)}${pad('RATING',COL_R)}${pad('TIDE',COL_TD)}  ║\n</span>`;
+  html += `<span class="tbl-header">║  ${pad('TIME',COL_T)}${pad('WAVES',COL_W)}${pad('PERIOD',COL_P)}${pad('WIND',COL_WN)}${pad('RATING',COL_R)}  ║\n</span>`;
   html += `<span class="tbl-border">╠${'═'.repeat(tw)}╣\n</span>`;
 
   rows.forEach(r => {
-    const timeStr = `${r.dayLabel || '?'} ${r.timeSlot || '?'}`;
-    const wStr = r.waveHeightFt ? `${r.waveHeightFt}FT` : '---';
-    const pStr = r.period ? `${r.period}s` : '---';
+    // Format time cleanly: "Mon 13 AM" or "Tue 14 PM"
+    const dayShort = (r.dayLabel || '').split(' ')[0] || '?';
+    const dayNum = (r.dayLabel || '').match(/\d+/)?.[0] || '';
+    const timeStr = `${dayShort} ${dayNum} ${(r.timeSlot || '').substring(0, 2)}`;
+
+    // Round wave height to 1 decimal
+    const wFt = r.waveHeightFt ? Math.round(r.waveHeightFt * 2) / 2 : 0;
+    const wStr = wFt > 0 ? `${wFt}FT` : '---';
+
+    // Round period to integer
+    const pStr = r.period ? `${Math.round(r.period)}s` : '---';
+
+    // Wind: direction + speed
     const wStr2 = r.windSpeedKts && r.windDir ? `${r.windDir} ${Math.round(r.windSpeedKts)}kt` : '---';
-    const eStr = r.energyKj ? `${Math.round(r.energyKj/100)}00kJ` : '---';
-    const stars = Math.round((r.rating10 || 0) / 2); // convert 0-10 rating to 0-5 stars
+
+    // Stars: convert 0-10 to 0-5
+    const stars = Math.round((r.rating10 || 0) / 2);
     const starsStr = '★'.repeat(Math.min(stars,5)) + '☆'.repeat(Math.max(0,5-stars));
-    const tideStr = r.highTideStr || r.lowTideStr || '---';
-    const cls = stars >= 4 ? 'tbl-good' : stars >= 2 ? 'tbl-data' : 'tbl-swim';
+    const cls = stars >= 3 ? 'tbl-good' : stars >= 2 ? 'tbl-data' : 'tbl-swim';
 
     html += `<span class="tbl-border">║</span>`;
     html += `<span class="tbl-data">  ${pad(timeStr, COL_T)}`;
     html += `</span><span class="${cls}">${pad(wStr, COL_W)}</span>`;
-    html += `<span class="tbl-data">${pad(pStr, COL_P)}`;
-    html += `${pad(wStr2, COL_WN)}${pad(eStr, COL_E)}</span>`;
-    html += `<span class="tbl-data">${pad(starsStr, COL_R)}`;
-    html += `${pad(tideStr, COL_TD)}  </span>`;
+    html += `<span class="tbl-data">${pad(pStr, COL_P)}${pad(wStr2, COL_WN)}</span>`;
+    html += `<span class="tbl-data">${pad(starsStr, COL_R)}  </span>`;
     html += `<span class="tbl-border">║\n</span>`;
   });
 
