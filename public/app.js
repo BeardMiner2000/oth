@@ -109,18 +109,15 @@ function render() {
 
   // Normalize data sources once
   const surflineData   = state.forecastData.surfline || [];
-  const sfNorm         = normalizeSurfForecastForTable(state.forecastData.surfForecast);
   const openMeteoNorm  = normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
-
   const useSurfline    = surflineData.length > 0;
-  const useSurfForecast = !useSurfline && sfNorm.length > 0;
-  const primaryData    = useSurfline ? surflineData : (useSurfForecast ? sfNorm : openMeteoNorm);
-  const verdictSource  = useSurfline ? 'surfline'
-    : (useSurfForecast ? 'surf-forecast'
-    : (openMeteoNorm.length ? 'open-meteo' : 'buoy'));
+
+  // Table: prefer Surfline granularity, fall back to Open-Meteo (not SF.com — too coarse)
+  const tableData      = useSurfline ? surflineData : openMeteoNorm;
+  const verdictSource  = useSurfline ? 'surfline' : (tableData.length ? 'open-meteo' : 'buoy');
 
   // Verdict uses the selected day's slice
-  const dayData       = getDaySlice(primaryData, state.currentDay);
+  const dayData       = getDaySlice(tableData, state.currentDay);
   const verdictInput  = buildVerdictInput(
     dayData,
     Array.isArray(state.buoyData) ? state.buoyData[0] : state.buoyData,
@@ -130,10 +127,10 @@ function render() {
   renderVerdictPanel(verdict);
 
   // Forecast table
-  renderForecastTable(primaryData, state.forecastData.tides, state.forecastData.conditions);
+  renderForecastTable(tableData, state.forecastData.tides, state.forecastData.conditions);
 
-  // surf-forecast.com cross-reference panel (only show when NOT the primary source)
-  renderSurfForecastSection(useSurfForecast ? null : state.forecastData.surfForecast);
+  // surf-forecast.com cross-reference panel (always show when available)
+  renderSurfForecastSection(state.forecastData.surfForecast);
 
   // Buoy panel
   renderBuoyPanel(state.buoyData);
@@ -178,7 +175,7 @@ function normalizeSurfForecastForTable(sfData) {
   if (!sfData || !sfData.data || sfData.error || sfData.data.length === 0) return [];
   const nowTs = Math.floor(Date.now() / 1000);
   return sfData.data
-    .filter(e => e.timestamp && e.timestamp >= nowTs - 3600 * 3)
+    .filter(e => e.timestamp && e.timestamp >= nowTs - 86400)
     .map(e => ({
       timestamp: e.timestamp,
       surf: {
