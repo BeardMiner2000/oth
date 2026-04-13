@@ -865,8 +865,8 @@ function drawScene(canvas, t) {
   const scrollPx = (t * 0.000083) % 1;
   const scrollN  = Math.floor(scrollPx * NW);
 
-  // Surfer at 40% from left
-  const surferNX = Math.floor(NW * 0.40);
+  // Surfer at 60% in canvas space (= 40% from left after horizontal flip)
+  const surferNX = Math.floor(NW * 0.60);
 
   // Wave profile heights (logical Y — smaller = higher on screen)
   const pocketNY = Math.floor(NH * 0.50);  // tallest point (pocket)
@@ -887,8 +887,10 @@ function drawScene(canvas, t) {
   const crashBndry   = -14 + catchUp;               // dist threshold, approaches -12
 
   // Wave surface height for any column
+  // dist uses surferNX - nx (flipped) so whitewater is on the right in canvas space,
+  // which becomes the LEFT (behind the surfer) after the horizontal mirror.
   function waveSurface(nx) {
-    const dist = nx - surferNX;
+    const dist = surferNX - nx;
     if (dist < crashBndry) {
       return wwNY;
     } else if (dist < -1) {
@@ -903,6 +905,11 @@ function drawScene(canvas, t) {
       return flatNY;
     }
   }
+
+  // ── Mirror entire scene: surfer faces right, wave breaks left (behind him) ──
+  ctx.save();
+  ctx.scale(-1, 1);
+  ctx.translate(-W, 0);
 
   // ── Background ────────────────────────────────────────────────────────────
   // Fill ocean blue, then paint sky & horizon on top
@@ -920,7 +927,7 @@ function drawScene(canvas, t) {
 
   // ── Wave columns ──────────────────────────────────────────────────────────
   for (let nx = 0; nx < NW; nx++) {
-    const dist     = nx - surferNX;
+    const dist     = surferNX - nx;  // flipped to match waveSurface
     const crestNY  = waveSurface(nx);
     const x        = nx * PX;
 
@@ -1006,7 +1013,9 @@ function drawScene(canvas, t) {
   ctx.translate(-pivotX, -pivotY);
   const frame = Math.floor(t / (1000 / NES.FPS)) % FRAMES.length;
   drawSprite(ctx, frame, spriteX, spriteY);
-  ctx.restore();
+  ctx.restore();  // sprite tilt
+
+  ctx.restore();  // horizontal mirror
 }
 
 function startSurferAnimation() {
