@@ -774,7 +774,7 @@ function updateTimestamp() {
 
 const NES = {
   PX:   4,     // logical pixel → screen pixel scale
-  FPS:  3,     // sprite animation frames per second (slow, lazy NES feel)
+  FPS:  1.5,   // sprite animation frames per second (slow, lazy longboard feel)
 };
 
 // ── Color palette (12 colors max, like an NES background palette) ──
@@ -865,8 +865,8 @@ function drawScene(canvas, t) {
   const NW = Math.ceil(W / PX);
   const NH = Math.ceil(H / PX);
 
-  // Wave scrolls slowly left — longboard wave speed
-  const scrollPx = (t * 0.018) % 1; // 0–1 fractional scroll per cycle
+  // Wave scrolls slowly left — longboard wave speed (~12s per full cycle)
+  const scrollPx = (t * 0.000083) % 1; // 0–1 fractional scroll per cycle
   const scrollN  = Math.floor(scrollPx * NW);
 
   // ── Sky ──────────────────────────────────────────────────────────────────
