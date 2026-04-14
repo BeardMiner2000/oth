@@ -138,7 +138,14 @@ function render() {
     verdictSource
   );
   const verdict = calculateVerdict(verdictInput);
-  renderVerdictPanel(verdict);
+
+  // Best time to surf today (only shown when viewing today)
+  const todayIntervals = getDaySlice(tableData, 0);
+  const bestTime = state.currentDay === 0
+    ? findBestSurfTimeToday(todayIntervals, state.forecastData.tides)
+    : null;
+
+  renderVerdictPanel(verdict, bestTime);
 
   // Forecast table
   renderForecastTable(tableData, state.forecastData.tides, state.forecastData.conditions);
@@ -515,8 +522,58 @@ function calculateVerdict(data) {
   return { verdict, score, cls, reasons, source: data ? data.source : null, parking };
 }
 
+// ─── Best time to surf today ─────────────────────────────────────────────────
+/**
+ * Score every future interval for today, return the best one.
+ * Uses same computeScore() logic so it's consistent with the verdict.
+ * Criteria: under 4ft, glassy/offshore wind, some push, lower tide.
+ */
+function findBestSurfTimeToday(todayIntervals, tides) {
+  const nowTs = Math.floor(Date.now() / 1000);
+  let best = null;
+  let bestScore = -1;
+
+  todayIntervals.forEach(entry => {
+    if (entry.timestamp < nowTs) return; // skip past slots
+
+    // Attach closest tide if not already present
+    const tideEntry = entry.tide || (tides && tides.length
+      ? tides.reduce((b, c) => Math.abs(c.timestamp - entry.timestamp) < Math.abs(b.timestamp - entry.timestamp) ? c : b)
+      : null);
+
+    const swellDir = entry.swells && entry.swells.length > 0
+      ? degToCompass(entry.swells.reduce((a, b) => a.height >= b.height ? a : b).direction)
+      : null;
+
+    const dominantSwell = (entry.swells || []).find(s => s.height > 0);
+    const verdictInput = {
+      wave: {
+        min:      entry.surf ? entry.surf.min : 0,
+        max:      entry.surf ? entry.surf.max : 0,
+        period:   dominantSwell ? dominantSwell.period : 0,
+        swellDir: swellDir || ''
+      },
+      wind: {
+        speed:     entry.wind ? entry.wind.speed         : 0,
+        direction: entry.wind ? degToCompass(entry.wind.direction) : '---',
+        gust:      entry.wind ? entry.wind.gust          : 0,
+        type:      entry.wind ? entry.wind.directionType : ''
+      },
+      tide: tideEntry || null
+    };
+
+    const { score } = computeScore(verdictInput);
+    if (score > bestScore) {
+      bestScore = score;
+      best = { entry, score, tideEntry, verdictInput };
+    }
+  });
+
+  return best;
+}
+
 // ─── Render: Verdict Panel ────────────────────────────────────────────────────
-function renderVerdictPanel(verdict) {
+function renderVerdictPanel(verdict, bestTime) {
   const box      = document.getElementById('verdict-box');
   const textEl   = document.getElementById('verdict-text');
   const labelEl  = document.getElementById('verdict-label');
@@ -560,6 +617,31 @@ function renderVerdictPanel(verdict) {
   if (parkEl && verdict.parking) {
     parkEl.className = `reason-item ${verdict.parking.cls}`;
     parkEl.textContent = `[ ${verdict.parking.text} ]`;
+  }
+
+  // Best time to surf today
+  const bestEl = document.getElementById('best-time-indicator');
+  if (bestEl) {
+    if (bestTime) {
+      const dt = new Date(bestTime.entry.timestamp * 1000);
+      const hr = dt.getHours();
+      const timeLabel = `${hr % 12 || 12}${hr < 12 ? 'AM' : 'PM'}`;
+      const waveMin = bestTime.entry.surf ? bestTime.entry.surf.min : 0;
+      const waveMax = bestTime.entry.surf ? bestTime.entry.surf.max : 0;
+      const waveStr = waveMin === waveMax ? `${waveMin}FT` : `${waveMin}-${waveMax}FT`;
+      const windSpeed = bestTime.verdictInput.wind.speed;
+      const windDir   = bestTime.verdictInput.wind.direction;
+      const windType  = bestTime.verdictInput.wind.type;
+      const isGlassy  = windSpeed < 3;
+      const isOffshore = windType === 'Offshore' || ['N','NNE','NE','ENE'].includes(windDir);
+      const windDesc  = isGlassy ? 'GLASSY' : isOffshore ? `${windDir} OFFSHORE` : `${windDir} ${Math.round(windSpeed)}KT`;
+      const tideH     = bestTime.tideEntry ? `${bestTime.tideEntry.height.toFixed(1)}FT TIDE` : null;
+      let desc = `${waveStr} // ${windDesc}`;
+      if (tideH) desc += ` // ${tideH}`;
+      bestEl.innerHTML = `<span class="reason-item reason-good">[ BEST TIME TODAY: ${timeLabel} — ${desc} ]</span>`;
+    } else {
+      bestEl.textContent = '';
+    }
   }
 }
 
