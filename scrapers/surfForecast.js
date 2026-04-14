@@ -115,7 +115,7 @@ function parseWindCell(text) {
  *     rating10 }
  */
 async function scrapeSpotForecast(spotSlug) {
-  const url    = `https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest`;
+  const url    = `https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest/six_day`;
   const result = { spotSlug, data: [], error: null, fetchedAt: new Date().toISOString() };
 
   let html;
@@ -175,9 +175,10 @@ async function scrapeSpotForecast(spotSlug) {
     }
 
     for (let i = 0; i < N; i++) {
-      // Map time index to day: assume 8 times per day (3-hour intervals)
-      const dayIndex = Math.floor(i / 8);
-      const dayLabel = days[dayIndex] || days[Math.min(dayIndex, days.length - 1)];
+      // Six-day endpoint has 14 day columns × 21 times (AM/PM/Night spread across columns)
+      // Map time index directly to day columns, wrapping around unique days
+      const dayIndex = i % days.length;
+      const dayLabel = days[dayIndex];
       const ts = parseSlotTimestamp(dayLabel, times[i]);
       if (!ts) continue;
 
