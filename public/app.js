@@ -153,10 +153,13 @@ function render() {
 
 // ─── Stormglass → Surfline-shape normalizer (primary forecast source) ─────────
 function normalizeStormglassForTable(intervals) {
-  const nowTs = Math.floor(Date.now() / 1000);
-  // Stormglass is hourly; sample every 3 hours, drop past intervals
+  // Only show data from today onwards
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const todayMidnightTs = Math.floor(todayMidnight.getTime() / 1000);
+  // Stormglass is hourly; sample every 3 hours
   return intervals
-    .filter((e, i) => i % 3 === 0 && e.timestamp >= nowTs - 3600)
+    .filter((e, i) => i % 3 === 0 && e.timestamp >= todayMidnightTs)
     .map(e => ({
       timestamp: e.timestamp,
       surf: {
@@ -185,10 +188,13 @@ function normalizeStormglassForTable(intervals) {
 
 // ─── Open-Meteo → Surfline-shape normalizer (fallback for forecast table) ─────
 function normalizeOpenMeteoForTable(intervals) {
-  const nowTs = Math.floor(Date.now() / 1000);
-  // Open-Meteo is hourly; sample every 3 hours, drop past intervals
+  // Only show data from today onwards
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const todayMidnightTs = Math.floor(todayMidnight.getTime() / 1000);
+  // Open-Meteo is hourly; sample every 3 hours
   return intervals
-    .filter((e, i) => i % 3 === 0 && e.timestamp >= nowTs - 3600)
+    .filter((e, i) => i % 3 === 0 && e.timestamp >= todayMidnightTs)
     .map(e => ({
       timestamp: e.timestamp,
       surf: {
@@ -218,9 +224,12 @@ function normalizeOpenMeteoForTable(intervals) {
 // ─── Surf-Forecast.com → Surfline-shape normalizer ────────────────────────────
 function normalizeSurfForecastForTable(sfData) {
   if (!sfData || !sfData.data || sfData.error || sfData.data.length === 0) return [];
-  const nowTs = Math.floor(Date.now() / 1000);
+  // Only show data from today onwards (not yesterday evening)
+  const now = new Date();
+  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const todayMidnightTs = Math.floor(todayMidnight.getTime() / 1000);
   return sfData.data
-    .filter(e => e.timestamp && e.timestamp >= nowTs - 86400)
+    .filter(e => e.timestamp && e.timestamp >= todayMidnightTs)
     .map(e => ({
       timestamp: e.timestamp,
       surf: {
