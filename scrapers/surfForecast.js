@@ -114,124 +114,138 @@ function parseWindCell(text) {
  *     period, windSpeedKmh, windSpeedKts, windDir, windState,
  *     rating10 }
  */
-async function scrapeSpotForecast(spotSlug) {
-  const url    = `https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest/six_day`;
-  const result = { spotSlug, data: [], error: null, fetchedAt: new Date().toISOString() };
+/**
+ * Parse a single HTML page of surf-forecast.com data into intervals.
+ * dayStride: how many unique days are in the table (used to compute day index).
+ * For /latest: days repeat twice in the row but stride = uniqueDayCount (8 times/day).
+ * For /six_day: days repeat twice, stride = uniqueDayCount, 3 times/day.
+ */
+function parseHtmlToIntervals(html, dayStride) {
+  const $ = cheerio.load(html);
+  const intervals = [];
 
-  let html;
-  try {
-    html = await fetchHtml(url);
-  } catch (err) {
-    result.error = `Fetch failed: ${err.message}`;
-    return result;
+  function row(name) {
+    const cells = [];
+    $(`tr[data-row-name="${name}"] td`).each((_, el) => cells.push($(el).text().trim()));
+    return cells;
   }
 
-  try {
-    const $ = cheerio.load(html);
+  const days       = row('days');
+  const timesRaw   = row('time');
+  const times      = timesRaw.map(t => t.replace(/[\s\u2009]/g, ' '));
+  const waveRaw    = row('wave-height');
+  const periods    = row('periods');
+  const winds      = row('wind');
+  const windStates = row('wind-state');
+  const energy     = row('energy-maxenergy');
 
-    // surf-forecast.com uses <tr data-row-name="..."> for each data type
-    function row(name) {
-      const cells = [];
-      $(`tr[data-row-name="${name}"] td`).each((_, el) => cells.push($(el).text().trim()));
-      return cells;
+  const ratings = [];
+  $('tr[data-row-name="rating"] td').each((_, el) => {
+    const dv = $(el).find('[data-value]').attr('data-value') || $(el).attr('data-value');
+    ratings.push(dv !== undefined ? String(dv) : $(el).text().trim());
+  });
+
+  const highTides = row('high-tide');
+  const lowTides  = row('low-tide');
+
+  const N = Math.min(times.length, waveRaw.length);
+  if (N === 0) return intervals;
+
+  // Unique days (first half of days array — second half is a duplicate section)
+  const uniqueDays = days.slice(0, dayStride);
+
+  for (let i = 0; i < N; i++) {
+    // Map column index to day: for /latest 8 cols per day, for /six_day cycle through unique days
+    const dayIndex = dayStride === 8
+      ? Math.floor(i / 8)
+      : i % uniqueDays.length;
+    const dayLabel = uniqueDays[dayIndex] || uniqueDays[uniqueDays.length - 1];
+    const ts = parseSlotTimestamp(dayLabel, times[i]);
+    if (!ts) continue;
+
+    const wave = parseWaveCell(waveRaw[i] || '');
+    const wind = parseWindCell(winds[i] || '');
+
+    const periodMatch = (periods[i] || '').match(/(\d+)/);
+    const period = periodMatch ? parseInt(periodMatch[1]) : null;
+
+    const ratingMatch = (ratings[i] || '').match(/([\d.]+)/);
+    const rating10 = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
+
+    const ws = (windStates[i] || '').trim();
+    const windState = ws ? ws.charAt(0).toUpperCase() + ws.slice(1) : '';
+
+    const energyMatch = (energy[i] || '').match(/(\d+)/);
+    const energyKj = energyMatch ? parseInt(energyMatch[1]) : null;
+
+    function parseTideTimes(tideStr) {
+      if (!tideStr) return [];
+      const times = [];
+      const matches = tideStr.matchAll(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?)/gi);
+      for (const match of matches) times.push(match[1].trim());
+      return times;
     }
 
-    const days       = row('days');
-    const timesRaw   = row('time');  // Already formatted: ["8 AM", "11 AM", "2 PM", ...] with HTML whitespace
-    const times      = timesRaw.map(t => t.replace(/[\s\u2009]/g, ' '));  // Normalize thin spaces to regular spaces
-    const waveRaw    = row('wave-height');
-    const periods    = row('periods');
-    const winds      = row('wind');
-    const windStates = row('wind-state');
-    const energy     = row('energy-maxenergy');
-
-    // Ratings — try data-value attribute on inner element first, fall back to text
-    const ratings = [];
-    $('tr[data-row-name="rating"] td').each((_, el) => {
-      const dv = $(el).find('[data-value]').attr('data-value') || $(el).attr('data-value');
-      ratings.push(dv !== undefined ? String(dv) : $(el).text().trim());
+    intervals.push({
+      timestamp:     ts,
+      dayLabel,
+      timeSlot:      times[i],
+      waveHeightM:   wave.heightM,
+      waveHeightFt:  wave.heightFt,
+      waveDirection: wave.direction,
+      period,
+      windSpeedKmh:  wind.speedKmh,
+      windSpeedKts:  wind.speedKts,
+      windDir:       wind.direction,
+      windState,
+      rating10,
+      energyKj,
+      highTideTimes: parseTideTimes(highTides[i]),
+      lowTideTimes:  parseTideTimes(lowTides[i])
     });
+  }
+  return intervals;
+}
 
-    // Tides (high/low) — collect all text from cells, may have multiple per cell
-    const highTides = row('high-tide');
-    const lowTides  = row('low-tide');
+async function scrapeSpotForecast(spotSlug) {
+  const result = { spotSlug, data: [], error: null, fetchedAt: new Date().toISOString() };
 
-    // Also try collecting from cell contents in case multiple tides are shown
-    const allHighTideTexts = [];
-    $('tr[data-row-name="high-tide"] td').each((_, el) => {
-      const text = $(el).text().trim();
-      if (text) allHighTideTexts.push(text);
-    });
-    const allLowTideTexts = [];
-    $('tr[data-row-name="low-tide"] td').each((_, el) => {
-      const text = $(el).text().trim();
-      if (text) allLowTideTexts.push(text);
-    });
+  // Fetch both endpoints in parallel:
+  // /latest      → 3 days × 8 intervals (3-hour granularity, days row has colspan 8)
+  // /six_day     → 7 days × 3 intervals (AM/PM/Night, days row repeated twice with 7 unique days)
+  const [latestHtml, sixDayHtml] = await Promise.allSettled([
+    fetchHtml(`https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest`),
+    fetchHtml(`https://www.surf-forecast.com/breaks/${spotSlug}/forecasts/latest/six_day`)
+  ]);
 
-    const N = Math.min(times.length, waveRaw.length);
-    if (N === 0) {
-      result.error = 'No columns found — surf-forecast.com may have changed structure';
+  try {
+    // Parse granular near-term data (8/day for 3 days)
+    const latestIntervals = latestHtml.status === 'fulfilled'
+      ? parseHtmlToIntervals(latestHtml.value, 8)
+      : [];
+
+    // Parse extended data (3/day for 7 days)
+    const sixDayIntervals = sixDayHtml.status === 'fulfilled'
+      ? parseHtmlToIntervals(sixDayHtml.value, 7)
+      : [];
+
+    if (latestIntervals.length === 0 && sixDayIntervals.length === 0) {
+      result.error = 'Both endpoints returned no data';
       return result;
     }
 
-    for (let i = 0; i < N; i++) {
-      // Six-day endpoint has 14 day columns × 21 times (AM/PM/Night spread across columns)
-      // Map time index directly to day columns, wrapping around unique days
-      const dayIndex = i % days.length;
-      const dayLabel = days[dayIndex];
-      const ts = parseSlotTimestamp(dayLabel, times[i]);
-      if (!ts) continue;
+    // Build set of timestamps already covered by /latest (granular data takes priority)
+    const latestDays = new Set(latestIntervals.map(e => e.dayLabel));
 
-      const wave = parseWaveCell(waveRaw[i] || '');
-      const wind = parseWindCell(winds[i] || '');
+    // Combine: use /latest for overlapping days, /six_day only for days beyond /latest range
+    const extended = sixDayIntervals.filter(e => !latestDays.has(e.dayLabel));
+    const combined = [...latestIntervals, ...extended]
+      .sort((a, b) => a.timestamp - b.timestamp);
 
-      const periodMatch = (periods[i] || '').match(/(\d+)/);
-      const period = periodMatch ? parseInt(periodMatch[1]) : null;
-
-      const ratingMatch = (ratings[i] || '').match(/([\d.]+)/);
-      const rating10 = ratingMatch ? parseFloat(ratingMatch[1]) : 0;
-
-      // windState values: "offshore", "onshore", "glassy", "cross-shore", etc.
-      // Capitalise first letter so it matches Surfline's "Offshore" / "Onshore" format
-      const ws = (windStates[i] || '').trim();
-      const windState = ws ? ws.charAt(0).toUpperCase() + ws.slice(1) : '';
-
-      // Energy/power: extract number in kJ, e.g. "1200 kJ" → 1200
-      const energyMatch = (energy[i] || '').match(/(\d+)/);
-      const energyKj = energyMatch ? parseInt(energyMatch[1]) : null;
-
-      // Parse tide times: "8:54 AM 1.0" or similar → extract all times
-      function parseTideTimes(tideStr) {
-        if (!tideStr) return [];
-        const times = [];
-        const matches = tideStr.matchAll(/(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?)/gi);
-        for (const match of matches) {
-          times.push(match[1].trim());
-        }
-        return times;
-      }
-
-      result.data.push({
-        timestamp:     ts,
-        dayLabel:      dayLabel,
-        timeSlot:      times[i],
-        waveHeightM:   wave.heightM,
-        waveHeightFt:  wave.heightFt,
-        waveDirection: wave.direction,
-        period,
-        windSpeedKmh:  wind.speedKmh,
-        windSpeedKts:  wind.speedKts,
-        windDir:       wind.direction,
-        windState,
-        rating10,
-        energyKj,
-        highTideTimes: parseTideTimes(highTides[i]),  // array of times
-        lowTideTimes:  parseTideTimes(lowTides[i])    // array of times
-      });
-    }
+    result.data = combined;
 
     if (result.data.length === 0) {
-      result.error = 'Rows found but no parseable data — structure may have changed';
+      result.error = 'No parseable data from either endpoint';
     }
   } catch (err) {
     result.error = `Parse error: ${err.message}`;
@@ -239,6 +253,7 @@ async function scrapeSpotForecast(spotSlug) {
 
   return result;
 }
+
 
 /**
  * Merge two or more arrays of forecast intervals by timestamp.

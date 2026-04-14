@@ -282,17 +282,44 @@ function getDaySlice(intervals, dayOffset) {
 
 /**
  * Pick best single representative interval from a day slice.
- * Prefer mid-morning (10am) or just pick first available.
+ * Scores each interval with computeScore() and returns the highest-scoring one.
+ * Restricted to daylight hours (6am–8pm) unless no daylight slot exists.
  */
 function getBestInterval(daySlice) {
   if (!daySlice || daySlice.length === 0) return null;
 
-  // Prefer ~10am reading
-  const morning = daySlice.find(e => {
+  const daylight = daySlice.filter(e => {
     const h = new Date(e.timestamp * 1000).getHours();
-    return h >= 9 && h <= 12;
+    return h >= 6 && h <= 20;
   });
-  return morning || daySlice[0];
+  const candidates = daylight.length > 0 ? daylight : daySlice;
+
+  let best = candidates[0];
+  let bestScore = -1;
+  candidates.forEach(entry => {
+    const dominantSwell = (entry.swells || []).find(s => s.height > 0);
+    const swellDir = entry.swells && entry.swells.length > 0
+      ? degToCompass(entry.swells.reduce((a, b) => a.height >= b.height ? a : b).direction)
+      : '';
+    const input = {
+      wave: {
+        min:      entry.surf ? entry.surf.min : 0,
+        max:      entry.surf ? entry.surf.max : 0,
+        period:   dominantSwell ? dominantSwell.period : 0,
+        swellDir
+      },
+      wind: {
+        speed:     entry.wind ? entry.wind.speed         : 0,
+        direction: entry.wind ? degToCompass(entry.wind.direction) : '---',
+        gust:      entry.wind ? entry.wind.gust          : 0,
+        type:      entry.wind ? entry.wind.directionType : ''
+      },
+      tide: entry.tide || null
+    };
+    const { score } = computeScore(input);
+    if (score > bestScore) { bestScore = score; best = entry; }
+  });
+  return best;
 }
 
 /**
@@ -535,6 +562,8 @@ function findBestSurfTimeToday(todayIntervals, tides) {
 
   todayIntervals.forEach(entry => {
     if (entry.timestamp < nowTs) return; // skip past slots
+    const h = new Date(entry.timestamp * 1000).getHours();
+    if (h < 6 || h > 20) return; // daylight only
 
     // Attach closest tide if not already present
     const tideEntry = entry.tide || (tides && tides.length
