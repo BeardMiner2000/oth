@@ -725,8 +725,13 @@ function renderForecastTable(intervals, tides, conditions) {
     // Wind
     const windSpeed = entry.wind ? entry.wind.speed         : null;
     const windDeg   = entry.wind ? entry.wind.direction     : null;
+    const windType  = entry.wind ? (entry.wind.directionType || '') : '';
     const windDir   = degToCompass(windDeg);
-    const windStr   = windSpeed !== null ? `${windDir} ${Math.round(windSpeed)}kt` : '---';
+    const windLabel = windSpeed < 3 ? 'glassy' :
+      (windType === 'Offshore' || ['N','NNE','NE','ENE'].includes(windDir)) ? 'off' :
+      (windType === 'Onshore'  || ['S','SSW','SW','W','WSW'].includes(windDir)) ? 'on' :
+      'cross';
+    const windStr   = windSpeed !== null ? `${Math.round(windSpeed)} ${windLabel}` : '---';
 
     // Tide (from entry or closest match in tides array)
     const tideEntry  = entry.tide || (tides && tides.length
@@ -811,7 +816,7 @@ function renderForecastTable(intervals, tides, conditions) {
 
   let html = `<pre class="forecast-table">`;
   html += `<span class="tbl-border">${escHtml(TOP)}\n</span>`;
-  html += `<span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}${pad('PARKING',COL_PARK)}  ║\n</span>`;
+  html += `<span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND (KT)',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}${pad('PARKING',COL_PARK)}  ║\n</span>`;
   html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
 
   rows.forEach(row => {
