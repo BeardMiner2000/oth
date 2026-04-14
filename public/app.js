@@ -724,13 +724,14 @@ function renderForecastTable(intervals, tides, conditions) {
 
     // Wind
     const windSpeed = entry.wind ? entry.wind.speed         : null;
-    const windDeg   = entry.wind ? entry.wind.direction     : null;
     const windType  = entry.wind ? (entry.wind.directionType || '') : '';
-    const windDir   = degToCompass(windDeg);
-    const windLabel = windSpeed < 3 ? 'glassy' :
-      (windType === 'Offshore' || ['N','NNE','NE','ENE'].includes(windDir)) ? 'off' :
-      (windType === 'Onshore'  || ['S','SSW','SW','W','WSW'].includes(windDir)) ? 'on' :
-      'cross';
+    const wt        = windType.toLowerCase();
+    const windLabel = windSpeed !== null && windSpeed < 3 ? 'glassy' :
+      wt === 'off'    || wt === 'offshore'  ? 'off'   :
+      wt === 'on'     || wt === 'onshore'   ? 'on'    :
+      wt.includes('cross')                  ? 'cross' :
+      wt === 'glass'  || wt === 'glassy'    ? 'glassy':
+      '---';
     const windStr   = windSpeed !== null ? `${Math.round(windSpeed)} ${windLabel}` : '---';
 
     // Tide (from entry or closest match in tides array)
