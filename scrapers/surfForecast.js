@@ -63,10 +63,12 @@ function parseSlotTimestamp(dayLabel, timeSlot) {
     '8 AM': 8, '11 AM': 11, '2 PM': 14, '5 PM': 17,
     '8 PM': 20, '11 PM': 23, '2 AM': 2, '5 AM': 5
   };
-  // Try direct lookup first, then try extracting hour from "8 AM" format
-  let hour = hourMap[timeSlot];
+
+  // Trim timeSlot to remove any hidden whitespace
+  const trimmedSlot = (timeSlot || '').trim();
+  let hour = hourMap[trimmedSlot];
   if (hour === undefined) {
-    const match = timeSlot.match(/(\d+)/);
+    const match = trimmedSlot.match(/(\d+)/);
     hour = match ? parseInt(match[1]) : 6;
   }
   return Math.floor(new Date(year, month, dayNum, hour, 0, 0).getTime() / 1000);
@@ -135,7 +137,8 @@ async function scrapeSpotForecast(spotSlug) {
     }
 
     const days       = row('days');
-    const times      = row('time');  // Already formatted as "8 AM", "11 AM", "2 PM", etc.
+    const timesRaw   = row('time');  // Already formatted: ["8 AM", "11 AM", "2 PM", ...] with HTML whitespace
+    const times      = timesRaw.map(t => t.replace(/[\s\u2009]/g, ' '));  // Normalize thin spaces to regular spaces
     const waveRaw    = row('wave-height');
     const periods    = row('periods');
     const winds      = row('wind');
