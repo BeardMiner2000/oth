@@ -534,7 +534,7 @@ footer {
   #ascii-logo { display: none; }
 
   header::before {
-    content: '[ JL WOULD GO ]';
+    content: '[ OTH ]';
     display: block;
     font-family: 'Press Start 2P', monospace;
     font-size: 0.8rem;
