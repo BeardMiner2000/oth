@@ -69,7 +69,9 @@ async function getMarineForecast(lat, lon, apiKey) {
       };
     });
   } catch (err) {
-    console.error('[STORMGLASS]', err.message);
+    const status = err.response?.status || 'unknown';
+    const detail = err.response?.data?.errors?.[0]?.message || err.response?.data?.message || err.message;
+    console.error(`[STORMGLASS] ${status} — ${detail} (lat=${lat}, lon=${lon})`);
     return [];
   }
 }
