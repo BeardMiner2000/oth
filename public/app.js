@@ -1013,9 +1013,12 @@ function updateDayDisplay() {
   if (!el) return;
 
   const MAX_DAYS = 4;
-  const labels   = ['TODAY', 'TOMORROW', '+2 DAYS', '+3 DAYS', '+4 DAYS'];
+  const targetDate = new Date();
+  targetDate.setDate(targetDate.getDate() + state.currentDay);
 
-  el.textContent = labels[state.currentDay] || `+${state.currentDay} DAYS`;
+  el.textContent = state.currentDay === 0
+    ? 'TODAY'
+    : targetDate.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
 
   const prev = document.getElementById('btn-prev');
   const next = document.getElementById('btn-next');
