@@ -36,6 +36,20 @@ function degToCompass(deg) {
   return DIR_NAMES[Math.round(((deg % 360) + 360) % 360 / 22.5) % 16];
 }
 
+function isBolinasSpot(spotKey = state.currentSpot) {
+  return spotKey === 'bolinas';
+}
+
+function buildSurfRange(heightFt, minFactor, maxFactor) {
+  if (!heightFt) {
+    return { min: 0, max: 0 };
+  }
+  return {
+    min: Math.max(0.5, Math.round((heightFt * minFactor) * 2) / 2),
+    max: Math.max(1.0, Math.round((heightFt * maxFactor) * 2) / 2)
+  };
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', init);
 
@@ -169,13 +183,9 @@ function normalizeStormglassForTable(intervals) {
     .filter((e, i) => i % 3 === 0 && e.timestamp >= todayMidnightTs)
     .map(e => ({
       timestamp: e.timestamp,
-      surf: {
-        // Stormglass aggregates multiple meteorological sources (NOAA, ECMWF, etc).
-        // Data is already fairly accurate for peak/average wave height at Bolinas.
-        // Apply modest calibration: ~85-95% of reported Hs for local surf height.
-        min: e.waveHeightFt ? Math.max(0.5, Math.round((e.waveHeightFt * 0.85) * 2) / 2) : 0,
-        max: e.waveHeightFt ? Math.max(1.0, Math.round((e.waveHeightFt * 0.95) * 2) / 2) : 0
-      },
+      surf: isBolinasSpot()
+        ? buildSurfRange(e.waveHeightFt, 0.85, 0.95)
+        : buildSurfRange(e.waveHeightFt, 0.9, 1.0),
       swells: e.waveHeightFt ? [{
         height:    e.waveHeightFt,
         // Stormglass wavePeriod (~10s) is better than Open-Meteo (~9s), closer to Surfline
@@ -204,12 +214,9 @@ function normalizeOpenMeteoForTable(intervals) {
     .filter((e, i) => i % 3 === 0 && e.timestamp >= todayMidnightTs)
     .map(e => ({
       timestamp: e.timestamp,
-      surf: {
-        // Open-Meteo wave_height is significant wave height (open ocean).
-        // Bolinas sees ~30-40% of Hs due to Point Reyes shadow + headland refraction.
-        min: e.waveHeightFt ? Math.max(0.5, Math.round((e.waveHeightFt * 0.30) * 2) / 2) : 0,
-        max: e.waveHeightFt ? Math.max(1.0, Math.round((e.waveHeightFt * 0.40) * 2) / 2) : 0
-      },
+      surf: isBolinasSpot()
+        ? buildSurfRange(e.waveHeightFt, 0.30, 0.40)
+        : buildSurfRange(e.waveHeightFt, 0.9, 1.0),
       swells: e.swellHeightFt ? [{
         height:    e.swellHeightFt,
         // Use wave_period as better estimate than swell_wave_period for Bolinas
@@ -302,6 +309,7 @@ function getBestInterval(daySlice) {
       ? degToCompass(entry.swells.reduce((a, b) => a.height >= b.height ? a : b).direction)
       : '';
     const input = {
+      spotKey: state.currentSpot,
       wave: {
         min:      entry.surf ? entry.surf.min : 0,
         max:      entry.surf ? entry.surf.max : 0,
@@ -332,14 +340,15 @@ function buildVerdictInput(daySlice, buoyData, sourceHint = 'surfline') {
     // Fall back to buoy data if no Surfline
     if (buoyData && buoyData.latest) {
       const b = buoyData.latest;
-      // Buoy 46026 measures open-ocean significant wave height at the SF Bar.
-      // Bolinas sees ~40% of that due to headland shadow + Point Reyes blocking.
-      // Use dominantPeriod if available, fall back to avgPeriod.
       const rawFt  = b.waveHeightFt || 0;
-      const surfFt = rawFt * 0.40;
+      const surfFt = isBolinasSpot() ? rawFt * 0.40 : rawFt;
+      const range = isBolinasSpot()
+        ? buildSurfRange(surfFt, 0.8, 1.1)
+        : buildSurfRange(surfFt, 0.9, 1.1);
       return {
-        wave:   { min: Math.round(surfFt * 0.8 * 2) / 2,
-                  max: Math.round(surfFt * 1.1 * 2) / 2,
+        spotKey: state.currentSpot,
+        wave:   { min: range.min,
+                  max: range.max,
                   period: b.dominantPeriod || b.avgPeriod || 0,
                   swellDir: b.swellDirectionCompass || '' },
         wind:   { speed: b.windSpeedKts || 0, direction: b.windDirection || '', gust: b.windGustKts || 0, type: '' },
@@ -363,6 +372,7 @@ function buildVerdictInput(daySlice, buoyData, sourceHint = 'surfline') {
 
   const dominantSwell = (interval.swells || []).find(s => s.height > 0);
   return {
+    spotKey: state.currentSpot,
     wave: {
       min:    interval.surf ? interval.surf.min : 0,
       max:    interval.surf ? interval.surf.max : 0,
@@ -497,11 +507,11 @@ function computeScore(data) {
     reasons.push({ text: `${swellDir} SWELL WEAK`, cls: 'reason-neutral' });
   }
 
-  // ── Tide (mid-to-low = best for the Patch; strong incoming = messy Channel) ──
+  // ── Tide (Bolinas only; generic tide preferences are too spot-specific) ──────
   const tideHeight = data.tide ? data.tide.height : null;
   const tideType   = data.tide ? (data.tide.type || '') : '';
 
-  if (tideHeight !== null) {
+  if (data.spotKey === 'bolinas' && tideHeight !== null) {
     if (tideHeight >= 0 && tideHeight <= 2.5) {
       score += 10;
       reasons.push({ text: `${tideHeight.toFixed(1)}FT LOW-MID TIDE`, cls: 'reason-good' });
@@ -576,6 +586,7 @@ function findBestSurfTimeToday(todayIntervals, tides) {
 
     const dominantSwell = (entry.swells || []).find(s => s.height > 0);
     const verdictInput = {
+      spotKey: state.currentSpot,
       wave: {
         min:      entry.surf ? entry.surf.min : 0,
         max:      entry.surf ? entry.surf.max : 0,

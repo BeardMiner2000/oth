@@ -3,6 +3,7 @@
 const axios = require('axios');
 
 const STORMGLASS_BASE = 'https://api.stormglass.io/v2/weather/point';
+const STORMGLASS_SOURCES = ['noaa', 'sg', 'icon', 'meto', 'dwd', 'fcoo', 'fmi', 'yr', 'smhi'];
 
 /**
  * Fetch marine forecast from Stormglass API (aggregates NOAA, ECMWF, Metoffice, etc).
@@ -24,6 +25,7 @@ async function getMarineForecast(lat, lon, apiKey) {
       'swellPeriod',
       'swellDirection',
       'windSpeed',
+      'windGust',
       'windDirection'
     ].join(',')
   });
@@ -46,25 +48,27 @@ async function getMarineForecast(lat, lon, apiKey) {
     return data.hours.map(hour => {
       const ts = Math.floor(new Date(hour.time).getTime() / 1000);
 
-      // Stormglass returns data from multiple sources; average them
-      const waveHeightFt = hour.waveHeight ? round1(hour.waveHeight.noaa * 3.28084) : null;
-      const wavePeriod = hour.wavePeriod ? round1(hour.wavePeriod.noaa) : null;
-      const swellHeightFt = hour.swellHeight ? round1(hour.swellHeight.noaa * 3.28084) : null;
-      const swellPeriod = hour.swellPeriod ? round1(hour.swellPeriod.noaa) : null;
-      const windSpeedKts = hour.windSpeed ? round1(hour.windSpeed.noaa * 1.94384) : null;  // m/s to knots
-      const windGustKts = hour.windGust ? round1(hour.windGust.noaa * 1.94384) : null;
+      const waveHeight = pickSourceValue(hour.waveHeight);
+      const wavePeriod = pickSourceValue(hour.wavePeriod);
+      const waveDirection = pickSourceValue(hour.waveDirection);
+      const swellHeight = pickSourceValue(hour.swellHeight);
+      const swellPeriod = pickSourceValue(hour.swellPeriod);
+      const swellDirection = pickSourceValue(hour.swellDirection);
+      const windSpeed = pickSourceValue(hour.windSpeed);
+      const windGust = pickSourceValue(hour.windGust);
+      const windDirection = pickSourceValue(hour.windDirection);
 
       return {
         timestamp:         ts,
-        waveHeightFt:      waveHeightFt,
-        wavePeriod:        wavePeriod,
-        waveDirection:     hour.waveDirection ? hour.waveDirection.noaa : null,
-        swellHeightFt:     swellHeightFt,
-        swellPeriod:       swellPeriod,
-        swellDirection:    hour.swellDirection ? hour.swellDirection.noaa : null,
-        windSpeedKts:      windSpeedKts,
-        windDirectionDeg:  hour.windDirection ? hour.windDirection.noaa : null,
-        windGustKts:       windGustKts,
+        waveHeightFt:      waveHeight !== null ? round1(waveHeight * 3.28084) : null,
+        wavePeriod:        round1(wavePeriod),
+        waveDirection:     waveDirection,
+        swellHeightFt:     swellHeight !== null ? round1(swellHeight * 3.28084) : null,
+        swellPeriod:       round1(swellPeriod),
+        swellDirection:    swellDirection,
+        windSpeedKts:      windSpeed !== null ? round1(windSpeed * 1.94384) : null,
+        windDirectionDeg:  windDirection,
+        windGustKts:       windGust !== null ? round1(windGust * 1.94384) : null,
         source:            'stormglass'
       };
     });
@@ -78,6 +82,20 @@ async function getMarineForecast(lat, lon, apiKey) {
 
 function round1(v) {
   return v !== null && v !== undefined ? Math.round(v * 10) / 10 : null;
+}
+
+function pickSourceValue(metric) {
+  if (!metric || typeof metric !== 'object') {
+    return null;
+  }
+
+  for (const source of STORMGLASS_SOURCES) {
+    if (typeof metric[source] === 'number' && !Number.isNaN(metric[source])) {
+      return metric[source];
+    }
+  }
+
+  return null;
 }
 
 module.exports = { getMarineForecast };

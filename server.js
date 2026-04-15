@@ -13,6 +13,25 @@ const surfForecast = require('./scrapers/surfForecast');
 const openMeteo   = require('./scrapers/openMeteo');
 const stormglass  = require('./scrapers/stormglass');
 
+const DEFAULT_CORS_ORIGINS = [
+  'https://oth.surf',
+  'https://www.oth.surf',
+  'http://localhost:3000',
+  'http://127.0.0.1:3000'
+];
+
+const allowedOrigins = new Set(
+  (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map(origin => origin.trim())
+    .filter(Boolean)
+    .concat(DEFAULT_CORS_ORIGINS)
+);
+
+const NOAA_TIDE_STATIONS = {
+  bolinas: '9414958'
+};
+
 // ─── Cache ────────────────────────────────────────────────────────────────────
 const forecastCache = new NodeCache({ stdTTL: 30 * 60, checkperiod: 5 * 60 });
 const buoyCache     = new NodeCache({ stdTTL: 15 * 60, checkperiod: 3 * 60 });
@@ -30,7 +49,14 @@ setInterval(() => {
 const app  = express();
 const PORT = process.env.PORT || 3000;
 
-app.use(cors());
+app.use(cors({
+  origin(origin, callback) {
+    if (!origin || allowedOrigins.has(origin)) {
+      return callback(null, true);
+    }
+    return callback(null, false);
+  }
+}));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -92,6 +118,7 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
   try {
     // Stormglass rate limiting: 10 calls/day free tier
     const canCallStormglass = stormglassCallCount < STORMGLASS_DAILY_LIMIT;
+    const noaaTideStation = NOAA_TIDE_STATIONS[spotKey];
     if (canCallStormglass && process.env.STORMGLASS_API_KEY) {
       stormglassCallCount++;
       console.log(`[STORMGLASS] Call ${stormglassCallCount}/${STORMGLASS_DAILY_LIMIT}`);
@@ -107,7 +134,9 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       canCallStormglass && process.env.STORMGLASS_API_KEY
         ? stormglass.getMarineForecast(spotMeta.lat, spotMeta.lon, process.env.STORMGLASS_API_KEY)
         : Promise.resolve([]),  // Skip Stormglass if rate limit hit; fall back to Open-Meteo
-      noaa.getTidePredictions('9414958')   // Bolinas tide gauge — fallback when Surfline blocked
+      noaaTideStation
+        ? noaa.getTidePredictions(noaaTideStation)
+        : Promise.resolve([])
     ]);
 
     const waves      = waveResult.status  === 'fulfilled' ? waveResult.value      : [];

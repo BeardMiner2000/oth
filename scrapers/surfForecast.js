@@ -24,6 +24,17 @@ const HEADERS = {
 
 const M_TO_FT   = 3.28084;
 const KMH_TO_KTS = 0.539957;
+const PACIFIC_TZ = 'America/Los_Angeles';
+const PACIFIC_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: PACIFIC_TZ,
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric'
+});
+const PACIFIC_OFFSET_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: PACIFIC_TZ,
+  timeZoneName: 'shortOffset'
+});
 
 async function fetchHtml(url) {
   let lastErr;
@@ -46,13 +57,13 @@ async function fetchHtml(url) {
 function parseSlotTimestamp(dayLabel, timeSlot) {
   const match = dayLabel.match(/(\d{1,2})$/);
   if (!match) return null;
-  const dayNum = parseInt(match[1]);
-  const now    = new Date();
-  let month = now.getMonth();
-  let year  = now.getFullYear();
+  const dayNum = parseInt(match[1], 10);
+  const now    = getPacificDateParts(new Date());
+  let month = now.month;
+  let year  = now.year;
 
   // Handle month roll-over (day number looks earlier than today)
-  if (dayNum < now.getDate() - 1) {
+  if (dayNum < now.day - 1) {
     month++;
     if (month > 11) { month = 0; year++; }
   }
@@ -68,10 +79,10 @@ function parseSlotTimestamp(dayLabel, timeSlot) {
   const trimmedSlot = (timeSlot || '').trim();
   let hour = hourMap[trimmedSlot];
   if (hour === undefined) {
-    const match = trimmedSlot.match(/(\d+)/);
-    hour = match ? parseInt(match[1]) : 6;
+    const slotMatch = trimmedSlot.match(/(\d+)/);
+    hour = slotMatch ? parseInt(slotMatch[1], 10) : 6;
   }
-  return Math.floor(new Date(year, month, dayNum, hour, 0, 0).getTime() / 1000);
+  return zonedDateTimeToUnix(year, month, dayNum, hour, PACIFIC_TZ);
 }
 
 /**
@@ -153,12 +164,12 @@ function parseHtmlToIntervals(html, dayStride) {
 
   // Unique days (first half of days array — second half is a duplicate section)
   const uniqueDays = days.slice(0, dayStride);
+  if (uniqueDays.length === 0) return intervals;
+  const intervalsPerDay = dayStride === 8 ? 8 : Math.max(1, Math.round(N / uniqueDays.length));
 
   for (let i = 0; i < N; i++) {
     // Map column index to day: for /latest 8 cols per day, for /six_day cycle through unique days
-    const dayIndex = dayStride === 8
-      ? Math.floor(i / 8)
-      : i % uniqueDays.length;
+    const dayIndex = Math.min(uniqueDays.length - 1, Math.floor(i / intervalsPerDay));
     const dayLabel = uniqueDays[dayIndex] || uniqueDays[uniqueDays.length - 1];
     const ts = parseSlotTimestamp(dayLabel, times[i]);
     if (!ts) continue;
@@ -275,17 +286,76 @@ function mergeIntervals(arrays) {
       const vals = group.map(e => e[key]).filter(v => v != null && !isNaN(v));
       return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
     }
+    function mode(key) {
+      const counts = new Map();
+      let winner = null;
+      let winnerCount = 0;
+      group
+        .map(entry => entry[key])
+        .filter(Boolean)
+        .forEach(value => {
+          const count = (counts.get(value) || 0) + 1;
+          counts.set(value, count);
+          if (count > winnerCount) {
+            winner = value;
+            winnerCount = count;
+          }
+        });
+      return winner;
+    }
     return {
       ...group[0],
       waveHeightM:  avg('waveHeightM'),
       waveHeightFt: avg('waveHeightFt'),
+      waveDirection: mode('waveDirection') || group[0].waveDirection,
       period:       avg('period'),
       windSpeedKmh: avg('windSpeedKmh'),
       windSpeedKts: avg('windSpeedKts'),
+      windDir:      mode('windDir') || group[0].windDir,
+      windState:    mode('windState') || group[0].windState,
       rating10:     avg('rating10'),
       energyKj:     avg('energyKj')
     };
   }).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function getPacificDateParts(date) {
+  const parts = PACIFIC_DATE_FORMATTER.formatToParts(date);
+  const values = {};
+  parts.forEach(part => {
+    if (part.type === 'year' || part.type === 'month' || part.type === 'day') {
+      values[part.type] = parseInt(part.value, 10);
+    }
+  });
+  return {
+    year: values.year,
+    month: values.month - 1,
+    day: values.day
+  };
+}
+
+function zonedDateTimeToUnix(year, month, day, hour, timeZone) {
+  const utcGuess = Date.UTC(year, month, day, hour, 0, 0);
+  const offsetMinutes = getTimeZoneOffsetMinutes(new Date(utcGuess), timeZone);
+  return Math.floor((utcGuess - (offsetMinutes * 60 * 1000)) / 1000);
+}
+
+function getTimeZoneOffsetMinutes(date, timeZone) {
+  const tzPart = PACIFIC_OFFSET_FORMATTER
+    .formatToParts(date)
+    .find(part => part.type === 'timeZoneName');
+  const label = tzPart ? tzPart.value : 'GMT';
+  if (timeZone !== PACIFIC_TZ) {
+    return 0;
+  }
+
+  const match = label.match(/GMT([+-])(\d{1,2})(?::?(\d{2}))?/i);
+  if (!match) return 0;
+
+  const sign = match[1] === '-' ? -1 : 1;
+  const hours = parseInt(match[2], 10);
+  const minutes = parseInt(match[3] || '0', 10);
+  return sign * ((hours * 60) + minutes);
 }
 
 module.exports = {
