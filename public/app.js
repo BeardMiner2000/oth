@@ -179,6 +179,8 @@ function render() {
   const stormglassNorm     = normalizeStormglassForTable(state.forecastData.stormglass || []);
   const useSurfline        = surflineData.length > 0;
   const useStormglass      = stormglassNorm.length > 0;
+  const waveSource         = state.forecastData.sources?.waves || (useSurfline ? 'surfline' : (useStormglass ? 'stormglass' : 'none'));
+  const tideSource         = state.forecastData.sources?.tides || ((state.forecastData.tides || []).length ? 'surfline' : 'none');
 
   // Surfline is the source of truth. Stormglass stays as backup if Surfline fails.
   let tableData, verdictSource;
@@ -208,8 +210,8 @@ function render() {
     : null;
 
   renderVerdictPanel(verdict, bestTime);
-  renderFridayFocus(tableData, state.forecastData.tides, verdictSource);
-  renderTideChart(tableData, state.forecastData.tides);
+  renderFridayFocus(tableData, state.forecastData.tides, verdictSource, { waveSource, tideSource });
+  renderTideChart(tableData, state.forecastData.tides, { tideSource });
 
   // 5-day summary
   renderForecastTable(tableData, state.forecastData.tides, state.forecastData.conditions);
@@ -221,17 +223,18 @@ function render() {
 
 // ─── Stormglass → Surfline-shape normalizer (primary forecast source) ─────────
 function normalizeStormglassForTable(intervals) {
-  // Only show data from today onwards
-  const now = new Date();
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const todayMidnightTs = Math.floor(todayMidnight.getTime() / 1000);
-  // Stormglass is hourly; sample every 3 hours
+  const todayKey = getPacificDayKey(shiftPacificDate(0));
+
+  // Stormglass is hourly; keep Pacific 3-hour slots (12/3/6/9...) rather than every third raw row.
   return intervals
-    .filter((e, i) => i % 3 === 0 && e.timestamp >= todayMidnightTs)
+    .filter(e => {
+      if (getPacificDayKeyFromTimestamp(e.timestamp) < todayKey) return false;
+      return getPacificMinute(e.timestamp) === 0 && getPacificHour(e.timestamp) % 3 === 0;
+    })
     .map(e => ({
       timestamp: e.timestamp,
       surf: isBolinasSpot()
-        ? buildSurfRange(e.waveHeightFt, 0.85, 0.95)
+        ? buildSurfRange(e.waveHeightFt, 0.25, 0.35)
         : buildSurfRange(e.waveHeightFt, 0.9, 1.0),
       swells: e.waveHeightFt ? [{
         height:    e.waveHeightFt,
@@ -642,34 +645,44 @@ function renderVerdictPanel(verdict, bestTime) {
 
   if (!box || !textEl) return;
 
+  const waveSource = state.forecastData?.sources?.waves || verdict.source || 'none';
+
   // Update class
-  box.className = verdict.cls;
+  box.className = waveSource === 'surfline' ? verdict.cls : 'chunky';
+  textEl.textContent = waveSource === 'surfline' ? verdict.verdict : '[ BACKUP ]';
 
-  textEl.textContent = verdict.verdict;
-
-  // Label — condition descriptor + OTH verdict question
+  // Label — condition descriptor + JL verdict question
   const labels = {
-    epic:     'OTH WOULD GO? // OLD GUY GLIDE ALERT',
-    good:     'OTH WOULD GO? // YES, CALL THE CREW',
-    marginal: 'OTH WOULD GO? // POKE YOUR HEAD OUT',
-    chunky:   'OTH WOULD GO? // MAYBE, BUT KEEP EXPECTATIONS LOW',
-    scary:    'OTH WOULD GO? // HARD PASS, MAYBE DORAN',
-    swim:     'OTH WOULD GO? // COFFEE WALK, NOT A SURF'
+    epic:     'JL WOULD GO? // OLD GUY GLIDE ALERT',
+    good:     'JL WOULD GO? // YES, CALL THE CREW',
+    marginal: 'JL WOULD GO? // POKE YOUR HEAD OUT',
+    chunky:   'JL WOULD GO? // MAYBE, BUT KEEP EXPECTATIONS LOW',
+    scary:    'JL WOULD GO? // HARD PASS, MAYBE DORAN',
+    swim:     'JL WOULD GO? // COFFEE WALK, NOT A SURF'
   };
-  if (labelEl) labelEl.textContent = labels[verdict.cls] || 'OTH WOULD GO?';
+  if (labelEl) {
+    labelEl.textContent = waveSource === 'surfline'
+      ? (labels[verdict.cls] || 'JL WOULD GO?')
+      : 'JL WOULD GO? // BACKUP READ, NOT SURFLINE';
+  }
 
   // Stoke meter
   if (stokeEl) {
-    stokeEl.textContent = buildStokeMeter(verdict.score);
+    stokeEl.textContent = waveSource === 'surfline'
+      ? buildStokeMeter(verdict.score)
+      : '[ BACKUP SOURCE - WAITING ON SURFLINE ]';
   }
 
   // Reasons + data source tag
   if (reasonEl) {
     const srcMap = { surfline: 'SURFLINE', stormglass: 'STORMGLASS BACKUP' };
     const srcTag = verdict.source ? `<span class="reason-item reason-neutral">[ SRC: ${srcMap[verdict.source] || verdict.source} ]</span>` : '';
+    const backupTag = waveSource !== 'surfline'
+      ? `<span class="reason-item reason-bad">[ SURFLINE FETCH FAILED ON SERVER - BACKUP ONLY ]</span>`
+      : '';
     reasonEl.innerHTML = (verdict.reasons
       ? verdict.reasons.map(r => `<span class="reason-item ${r.cls}">[ ${r.text} ]</span>`).join(' ')
-      : '') + ' ' + srcTag;
+      : '') + ' ' + srcTag + ' ' + backupTag;
   }
 
   // Parking indicator
@@ -714,7 +727,7 @@ function buildStokeMeter(score) {
   return `[ ${bar} ] ${score}%`;
 }
 
-function renderFridayFocus(intervals, tides, source) {
+function renderFridayFocus(intervals, tides, source, sourceMeta = {}) {
   const wrap = document.getElementById('friday-focus-wrap');
   if (!wrap) return;
 
@@ -734,12 +747,29 @@ function renderFridayFocus(intervals, tides, source) {
     ? `${session.minTide.toFixed(1)}-${session.maxTide.toFixed(1)} FT`
     : 'NO TIDE';
   const fridayKicker = isCurrentFriday ? 'THIS FRIDAY' : 'NEXT FRIDAY';
+  const waveSourceLabel = sourceMeta.waveSource === 'surfline' ? 'SURFLINE' : 'STORMGLASS BACKUP';
+  const tideSourceLabel = sourceMeta.tideSource === 'surfline' ? 'SURFLINE' : sourceMeta.tideSource === 'noaa' ? 'NOAA BACKUP' : 'UNKNOWN';
+  const sourceWarning = sourceMeta.waveSource !== 'surfline'
+    ? 'SURFLINE IS FAILING ON THE SERVER RIGHT NOW. THIS FRIDAY CARD IS A BACKUP READ, NOT JL TRUTH.'
+    : sourceMeta.tideSource !== 'surfline'
+      ? 'TIDE CURVE IS CURRENTLY ON NOAA BACKUP BECAUSE SURFLINE TIDE FETCH FAILED.'
+      : '';
+  const focusHeadline = sourceMeta.waveSource === 'surfline'
+    ? buildFridayHeadline(verdict, session)
+    : 'SURFLINE BLOCKED // BACKUP READ ONLY';
+  const focusCopy = sourceMeta.waveSource === 'surfline'
+    ? buildFridayCopy(session, verdict)
+    : `Backup read is showing ${session.waveLabel.toLowerCase()}. Wait for Surfline before treating this like JL gospel.`;
+  const stokeDisplay = sourceMeta.waveSource === 'surfline' ? `${verdict.score}%` : 'BACKUP ONLY';
+  const focusClass = sourceMeta.waveSource === 'surfline' ? verdict.cls : 'chunky';
 
   wrap.innerHTML = `
     <div class="focus-card">
       <div class="focus-kicker">${escHtml(fridayKicker)} // ${escHtml(fridayLabel)}</div>
-      <div class="focus-headline ${verdict.cls}">${escHtml(buildFridayHeadline(verdict, session))}</div>
-      <div class="focus-copy">${escHtml(buildFridayCopy(session, verdict))}</div>
+      <div class="focus-headline ${focusClass}">${escHtml(focusHeadline)}</div>
+      <div class="focus-copy">${escHtml(focusCopy)}</div>
+      ${sourceWarning ? `<div class="focus-warning">${escHtml(sourceWarning)}</div>` : ''}
+      <div class="focus-source">WAVES: ${escHtml(waveSourceLabel)} // TIDES: ${escHtml(tideSourceLabel)}</div>
       <div class="focus-grid">
         <div class="focus-stat">
           <div class="focus-stat-label">DAWN WINDOW</div>
@@ -747,7 +777,7 @@ function renderFridayFocus(intervals, tides, source) {
         </div>
         <div class="focus-stat">
           <div class="focus-stat-label">STOKE METER</div>
-          <div class="focus-stat-value">${escHtml(`${verdict.score}%`)}</div>
+          <div class="focus-stat-value">${escHtml(stokeDisplay)}</div>
         </div>
         <div class="focus-stat">
           <div class="focus-stat-label">SURF</div>
@@ -769,7 +799,7 @@ function renderFridayFocus(intervals, tides, source) {
   `;
 }
 
-function renderTideChart(intervals, tides) {
+function renderTideChart(intervals, tides, sourceMeta = {}) {
   const wrap = document.getElementById('tide-chart-wrap');
   if (!wrap) return;
 
@@ -809,11 +839,15 @@ function renderTideChart(intervals, tides) {
     return minute === 0 && hour % 2 === 0;
   });
   const label = PACIFIC_DATE_LABEL_FORMATTER.format(targetDate).toUpperCase();
+  const tideSourceLabel = sourceMeta.tideSource === 'surfline' ? 'SURFLINE' : sourceMeta.tideSource === 'noaa' ? 'NOAA BACKUP' : 'UNKNOWN';
+  const tideMeta = sourceMeta.tideSource === 'surfline'
+    ? 'SURFLINE TIDE CURVE. LOW TIDE PATCH WINDOW, HIGH TIDE CHANNEL WINDOW.'
+    : 'NOAA BACKUP TIDE CURVE. SURFLINE TIDE FETCH FAILED ON SERVER.';
 
   wrap.innerHTML = `
     <div class="tide-chart-card">
       <div class="tide-chart-title">TIDE CURVE // ${escHtml(label)}</div>
-      <div class="tide-chart-meta">SURFLINE PRIMARY, NOAA BACKUP. LOW TIDE PATCH WINDOW, HIGH TIDE CHANNEL WINDOW.</div>
+      <div class="tide-chart-meta">${escHtml(tideMeta)}</div>
       <svg class="tide-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Tide chart for selected day">
         ${yTicks.map(tick => `
           <line class="tide-grid tide-grid-h" x1="${padX}" y1="${tick.y}" x2="${width - padX}" y2="${tick.y}" />
@@ -834,6 +868,7 @@ function renderTideChart(intervals, tides) {
         `).join('')}
         ${hourTicks.map(point => `<text class="tide-label tide-time-label" x="${point.x}" y="${height - 6}">${escHtml(formatHourShort(point.timestamp))}</text>`).join('')}
       </svg>
+      <div class="focus-source">TIDE SOURCE: ${escHtml(tideSourceLabel)}</div>
       <div class="tide-events">
         ${tideEvents.map(point => `<span class="tide-event ${point.type === 'LOW' ? 'low' : 'high'}">${escHtml(`${point.type} ${formatTimestamp(point.timestamp)} ${point.height.toFixed(1)}FT`)}</span>`).join('')}
       </div>
@@ -1322,7 +1357,7 @@ function updateTimestamp() {
 // Slightly finer than the original pass, still retro and intentionally chunky.
 
 const NES = {
-  PX:  4,    // logical pixel → screen pixel scale
+  PX:  5,    // logical pixel → screen pixel scale
   FPS: 1.5,  // sprite animation FPS (slow, lazy longboard feel)
 };
 
@@ -1348,6 +1383,7 @@ const C = {
   skin:   '#e8b068',  // warm golden skin
   beard:  '#d9d9d4',  // gray beard — light so it reads clearly
   beardD: '#8c8c88',  // beard shadow
+  outline:'#08111b',  // sprite outline so the surfer pops
   suit:   '#1e4880',  // wetsuit blue
   suitD:  '#142e58',  // dark wetsuit shadow
   board:  '#e8cc3a',  // yellow longboard
@@ -1404,19 +1440,27 @@ const FRAMES = [
 const SPRITE_W = 20;
 const SPRITE_H = 18;
 
-function drawSprite(ctx, frame, x, y) {
-  const rows = FRAMES[frame % FRAMES.length];
+function drawSpriteLayer(ctx, rows, x, y, colorOverride, offsetX = 0, offsetY = 0) {
   rows.forEach((row, ry) => {
     row.forEach((key, rx) => {
       if (!key || !C[key]) return;
-      ctx.fillStyle = C[key];
+      ctx.fillStyle = colorOverride || C[key];
       ctx.fillRect(
-        Math.floor(x + rx * NES.PX),
-        Math.floor(y + ry * NES.PX),
+        Math.floor(x + rx * NES.PX + offsetX),
+        Math.floor(y + ry * NES.PX + offsetY),
         NES.PX, NES.PX
       );
     });
   });
+}
+
+function drawSprite(ctx, frame, x, y) {
+  const rows = FRAMES[frame % FRAMES.length];
+  drawSpriteLayer(ctx, rows, x, y, C.outline, -1, 0);
+  drawSpriteLayer(ctx, rows, x, y, C.outline, 1, 0);
+  drawSpriteLayer(ctx, rows, x, y, C.outline, 0, -1);
+  drawSpriteLayer(ctx, rows, x, y, C.outline, 0, 1);
+  drawSpriteLayer(ctx, rows, x, y, null, 0, 0);
 }
 
 function drawScene(canvas, t) {
@@ -1432,26 +1476,26 @@ function drawScene(canvas, t) {
   const scrollPx = (t * 0.00009) % 1;
   const scrollN  = Math.floor(scrollPx * NW);
 
-  // A slow glide across a small peeling shoulder.
+  // A slow glide across a flatter, soft longboard shoulder.
   const rideDur = 26000;
   const rideProgress = (t % rideDur) / rideDur;
-  const surferNX = Math.floor(NW * (0.78 - rideProgress * 0.42));
+  const surferNX = Math.floor(NW * (0.7 - rideProgress * 0.24));
   const bob = Math.round(Math.sin(t * 0.001) * 1);
   const horizonNY = Math.floor(NH * 0.27);
   const flatNY = NH - 4;
-  const shoulderBase = Math.floor(NH * 0.59);
-  const lipTop = Math.floor(NH * 0.42);
+  const shoulderBase = Math.floor(NH * 0.61);
+  const lipTop = Math.floor(NH * 0.5);
   const foamBase = Math.floor(NH * 0.57);
-  const whitewaterFloor = Math.floor(NH * 0.67);
-  const pocketDist = -6;
-  const foamStartDist = pocketDist - 12;
-  const shoulderRun = 54;
+  const whitewaterFloor = Math.floor(NH * 0.64);
+  const pocketDist = -4;
+  const foamStartDist = pocketDist - 8;
+  const shoulderRun = 72;
   const surferFaceY = shoulderBase + bob - 1;
 
   function waveSurface(nx) {
     const dist = surferNX - nx;
     if (dist < foamStartDist) {
-      const frac = Math.min(1, (foamStartDist - dist) / 22);
+      const frac = Math.min(1, (foamStartDist - dist) / 18);
       return Math.round(whitewaterFloor + (flatNY - whitewaterFloor) * frac);
     }
     if (dist < pocketDist) {
@@ -1503,7 +1547,7 @@ function drawScene(canvas, t) {
       ctx.fillStyle = C.foam1;
       ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
       ctx.fillRect(x, (crestNY + 2) * PX, PX, PX);
-      const lipOverhang = Math.max(0, Math.round((0 - dist) / 2));
+      const lipOverhang = Math.max(0, Math.round((0 - dist) / 3));
       if (lipOverhang > 0) {
         ctx.fillStyle = C.spray;
         ctx.fillRect(x, Math.max(0, crestNY - 1) * PX, PX, PX);
@@ -1549,7 +1593,7 @@ function drawScene(canvas, t) {
   // ── Surfer ────────────────────────────────────────────────────────────────
   // Anchor nose a few cols to the right of surferNX in canvas space;
   // after flip this puts the nose slightly ahead. Board tail extends left on screen.
-  const spriteX   = surferNX * PX - 4 * PX;
+  const spriteX   = surferNX * PX - 6 * PX;
   const spriteY   = surferFaceY * PX - SPRITE_H * PX;
 
   // Gentle sway — no dramatic tilt, just a slow lazy lean

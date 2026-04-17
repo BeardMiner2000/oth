@@ -9,6 +9,37 @@ const BUOYS = {
 };
 
 const NDBC_BASE = 'https://www.ndbc.noaa.gov/data/realtime2';
+const PACIFIC_TZ = 'America/Los_Angeles';
+
+function parsePacificOffsetMinutes(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PACIFIC_TZ,
+    timeZoneName: 'shortOffset',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+
+  const zone = parts.find(part => part.type === 'timeZoneName')?.value || 'GMT-8';
+  const match = zone.match(/GMT([+-]\d{1,2})(?::?(\d{2}))?/);
+  if (!match) return -8 * 60;
+
+  const hours = Number(match[1]);
+  const minutes = Number(match[2] || 0);
+  return hours * 60 + (hours >= 0 ? minutes : -minutes);
+}
+
+function parsePacificLocalTimestamp(value) {
+  const [datePart, timePart] = value.split(' ');
+  const [year, month, day] = datePart.split('-').map(Number);
+  const [hour, minute] = timePart.split(':').map(Number);
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  const offsetMinutes = parsePacificOffsetMinutes(utcGuess);
+  return Math.floor((Date.UTC(year, month - 1, day, hour, minute) - (offsetMinutes * 60 * 1000)) / 1000);
+}
 
 /**
  * Parse NDBC realtime2 text files.
@@ -195,7 +226,7 @@ async function getTidePredictions(stationId) {
 
   const predictions = (res.data && res.data.predictions) ? res.data.predictions : [];
   return predictions.map(p => ({
-    timestamp: Math.floor(new Date(p.t).getTime() / 1000),
+    timestamp: parsePacificLocalTimestamp(p.t),
     height:    parseFloat(p.v),
     type:      'NORMAL'
   }));

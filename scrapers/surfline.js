@@ -14,22 +14,47 @@ const SPOTS = {
 
 const BASE = 'https://services.surfline.com/kbyg/spots/forecasts';
 
-const HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Referer':    'https://www.surfline.com/',
-  'Accept':     'application/json'
-};
+const HEADER_PROFILES = [
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/135.0.0.0 Safari/537.36',
+    'Accept': 'application/json, text/plain, */*',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Origin': 'https://www.surfline.com',
+    'Referer': 'https://www.surfline.com/',
+    'Sec-Fetch-Site': 'same-site',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-CH-UA': '"Chromium";v="135", "Google Chrome";v="135", "Not.A/Brand";v="8"',
+    'Sec-CH-UA-Mobile': '?0',
+    'Sec-CH-UA-Platform': '"macOS"'
+  },
+  {
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Referer': 'https://www.surfline.com/',
+    'Accept': 'application/json'
+  }
+];
 
 async function safeFetch(url) {
-  try {
-    const res = await axios.get(url, { headers: HEADERS, timeout: 15000 });
-    return res.data;
-  } catch (err) {
-    const status = err.response ? err.response.status : 'no-response';
-    const msg    = err.response ? JSON.stringify(err.response.data).slice(0, 200) : err.message;
-    console.error(`[Surfline] HTTP ${status} for ${url} — ${msg}`);
-    throw new Error(`Surfline HTTP ${status}: ${err.message}`);
+  let lastErr = null;
+
+  for (const headers of HEADER_PROFILES) {
+    try {
+      const res = await axios.get(url, {
+        headers,
+        timeout: 15000
+      });
+      return res.data;
+    } catch (err) {
+      lastErr = err;
+      const status = err.response ? err.response.status : 'no-response';
+      const msg = err.response ? JSON.stringify(err.response.data).slice(0, 200) : err.message;
+      console.error(`[Surfline] HTTP ${status} for ${url} — ${msg}`);
+    }
   }
+
+  const status = lastErr && lastErr.response ? lastErr.response.status : 'no-response';
+  throw new Error(`Surfline HTTP ${status}: ${lastErr ? lastErr.message : 'Unknown error'}`);
 }
 
 /**

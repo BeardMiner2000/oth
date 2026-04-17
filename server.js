@@ -156,6 +156,10 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       tides,
       conditions:     conds,
       stormglass:     stormglassData,
+      sources: {
+        waves: merged.length > 0 ? 'surfline' : (stormglassData.length > 0 ? 'stormglass' : 'none'),
+        tides: sfTides.length > 0 ? 'surfline' : (noaaTides.length > 0 ? 'noaa' : 'none')
+      },
       fetchedAt:      new Date().toISOString(),
       cached:         false,
       errors: {
@@ -167,7 +171,8 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       }
     };
 
-    forecastCache.set(cacheKey, payload);
+    const ttl = merged.length > 0 ? 30 * 60 : 5 * 60;
+    forecastCache.set(cacheKey, payload, ttl);
     res.json(payload);
   } catch (err) {
     next(err);
