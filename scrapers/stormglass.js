@@ -25,7 +25,7 @@ async function getMarineForecast(lat, lon, apiKey) {
       'swellPeriod',
       'swellDirection',
       'windSpeed',
-      'windGust',
+      'gust',
       'windDirection'
     ].join(',')
   });
@@ -55,7 +55,7 @@ async function getMarineForecast(lat, lon, apiKey) {
       const swellPeriod = pickSourceValue(hour.swellPeriod);
       const swellDirection = pickSourceValue(hour.swellDirection);
       const windSpeed = pickSourceValue(hour.windSpeed);
-      const windGust = pickSourceValue(hour.windGust);
+      const windGust = pickSourceValue(hour.gust);
       const windDirection = pickSourceValue(hour.windDirection);
 
       return {

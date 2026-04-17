@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="OTH - Over The Hill surf forecast for Bolinas and NorCal spots" />
+  <meta name="description" content="OTH - Friday dawn patrol stoke meter for Bolinas" />
   <title>OTH // SURF PREDICTION SYSTEM</title>
 
   <!-- Retro terminal fonts -->
@@ -33,7 +33,7 @@
       </pre>
       <div id="system-status">
         <span class="blink-cursor">▋</span>
-        OVER THE HILL // NOVATO → BOLINAS // SURF PREDICTION SYSTEM v1.0
+        OVER THE HILL // BOLINAS BEARD PATROL // FRIDAY LONGBOARD REPORT
         <span class="blink-cursor">▋</span>
       </div>
     </header>
@@ -45,13 +45,6 @@
 
     <!-- ═══════════════════════════════════ CONTROLS ═════════════════════════════════ -->
     <div id="controls">
-      <div id="spot-selector-wrap">
-        <div class="ctrl-label">▶ SELECT BREAK:</div>
-        <div id="spot-selector">
-          <!-- Populated by app.js -->
-          <div class="loading-spots">LOADING SPOTS...</div>
-        </div>
-      </div>
       <div id="date-nav">
         <div class="ctrl-label">▶ FORECAST DAY:</div>
         <div id="date-nav-btns">
@@ -61,6 +54,13 @@
         </div>
       </div>
     </div>
+
+    <section id="friday-focus">
+      <div class="section-header">▶ UPCOMING FRIDAY // DAWN PATROL</div>
+      <div id="friday-focus-wrap">
+        <div class="terminal-msg">SCANNING NEXT FRIDAY...</div>
+      </div>
+    </section>
 
     <!-- ═════════════════════════════════ VERDICT PANEL ══════════════════════════════ -->
     <div id="verdict-panel">
@@ -77,6 +77,13 @@
       </div>
     </div>
 
+    <section id="tide-panel">
+      <div class="section-header">▶ SELECTED DAY // TIDE CURVE</div>
+      <div id="tide-chart-wrap">
+        <div class="terminal-msg">PLOTTING TIDE CURVE...</div>
+      </div>
+    </section>
+
     <!-- ════════════════════════════════ STATUS BAR ═════════════════════════════════ -->
     <div id="status-bar">
       <div id="loading-bar-wrap">
@@ -87,31 +94,23 @@
       </div>
       <div id="status-line">
         SYSTEM: ONLINE // LAST UPDATED: <span id="last-updated">--:-- PST</span>
-        &nbsp;//&nbsp; SOURCE: SURF-FORECAST.COM + STORMGLASS + OPEN-METEO
+        &nbsp;//&nbsp; SOURCE: SURFLINE PRIMARY // STORMGLASS BACKUP
         &nbsp;//&nbsp; <a href="#" onclick="refreshData(); return false;" class="refresh-link">[ REFRESH ]</a>
       </div>
     </div>
 
     <!-- ═══════════════════════════════════ FORECAST ═════════════════════════════════ -->
     <div id="forecast-grid">
-      <div class="section-header">▶ 5-DAY FORECAST // <span id="forecast-spot-name">--</span></div>
-      <div id="forecast-table-wrap">
+      <div class="section-header">▶ 5-DAY GLIDE REPORT // <span id="forecast-spot-name">--</span></div>
+      <div id="forecast-cards-wrap">
         <div class="terminal-msg">AWAITING DATA FEED...</div>
-      </div>
-    </div>
-
-    <!-- ════════════════════════════════ BUOY PANEL ══════════════════════════════════ -->
-    <div id="buoy-panel">
-      <div class="section-header">▶ REAL-TIME BUOY DATA</div>
-      <div id="buoy-data-wrap">
-        <div class="terminal-msg">CONNECTING TO NOAA BUOYS...</div>
       </div>
     </div>
 
     <!-- ═══════════════════════════════════ FOOTER ═══════════════════════════════════ -->
     <footer>
       <div id="coord-line">
-        LAT: 37.9091° N &nbsp;|&nbsp; LON: 122.6830° W &nbsp;|&nbsp; BOLINAS LAGOON, MARIN COUNTY, CA
+        LAT: 37.9091° N &nbsp;|&nbsp; LON: 122.6830° W &nbsp;|&nbsp; BOLINAS // PATCH OR CHANNEL // OLD GUY GLIDE WINDOW
       </div>
     </footer>
 

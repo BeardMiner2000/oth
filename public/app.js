@@ -9,21 +9,13 @@ const state = {
   currentSpot:  'bolinas',
   currentDay:   0,         // 0 = today, 1 = tomorrow, ...
   forecastData: null,
-  buoyData:     null,
   loading:      false,
-  lastUpdated:  null,
-  spots:        {}
+  lastUpdated:  null
 };
 
 // ─── Spot Definitions (mirrors server) ───────────────────────────────────────
 const SPOTS = {
-  bolinas:      { id: '5842041f4e65fad6a77089c2', name: 'Bolinas',         region: 'Marin',         lat: 37.9051, lon: -122.6815 },
-  stinson:      { id: '5842041f4e65fad6a77089c1', name: 'Stinson Beach',   region: 'Marin',         lat: 37.8978, lon: -122.6415 },
-  oceanBeachSF: { id: '638e32a4f052ba4ed06d0e3e', name: 'Ocean Beach SF',  region: 'San Francisco', lat: 37.7594, lon: -122.5107 },
-  lindaMar:     { id: '5842041f4e65fad6a7708976', name: 'Linda Mar',       region: 'Pacifica',      lat: 37.5856, lon: -122.4995 },
-  mavericks:    { id: '5842041f4e65fad6a7708801', name: "Maverick's",      region: 'Half Moon Bay', lat: 37.4917, lon: -122.5042 },
-  dillonBeach:  { id: '584204204e65fad6a770938c', name: 'Dillon Beach',    region: 'Marin',         lat: 38.2394, lon: -122.9618 },
-  salmonCreek:  { id: '5842041f4e65fad6a77089c8', name: 'Salmon Creek',    region: 'Sonoma',        lat: 38.3394, lon: -123.0582 }
+  bolinas:      { id: '5842041f4e65fad6a77089c2', name: 'Bolinas', region: 'Marin', lat: 37.9051, lon: -122.6815 }
 };
 
 // ─── Wind direction helpers ───────────────────────────────────────────────────
@@ -54,7 +46,6 @@ function buildSurfRange(heightFt, minFactor, maxFactor) {
 document.addEventListener('DOMContentLoaded', init);
 
 async function init() {
-  renderSpotSelector();
   renderDateNav();
   await loadForecast(state.currentSpot);
   startAutoRefresh();
@@ -73,18 +64,12 @@ function startAutoRefresh() {
 async function loadForecast(spotId) {
   setLoading(true);
   try {
-    const [forecast, ...buoys] = await Promise.all([
-      fetch(`/api/forecast/${spotId}`).then(r => {
-        if (!r.ok) throw new Error(`Forecast API returned ${r.status}`);
-        return r.json();
-      }),
-      fetch(`/api/buoy/46026`).then(r => r.json()).catch(e => ({ error: e.message, latest: null })),
-      fetch(`/api/buoy/46013`).then(r => r.json()).catch(e => ({ error: e.message, latest: null })),
-      fetch(`/api/buoy/46214`).then(r => r.json()).catch(e => ({ error: e.message, latest: null }))
-    ]);
+    const forecast = await fetch(`/api/forecast/${spotId}`).then(r => {
+      if (!r.ok) throw new Error(`Forecast API returned ${r.status}`);
+      return r.json();
+    });
 
     state.forecastData = forecast;
-    state.buoyData     = buoys;
     state.lastUpdated  = new Date();
 
     // Log any server-side fetch errors for debugging
@@ -123,32 +108,27 @@ function render() {
 
   // Normalize data sources once
   const surflineData       = state.forecastData.surfline || [];
-  const surfForecastNorm   = normalizeSurfForecastForTable(state.forecastData.surfForecast || {});
   const stormglassNorm     = normalizeStormglassForTable(state.forecastData.stormglass || []);
-  const openMeteoNorm      = normalizeOpenMeteoForTable(state.forecastData.openMeteo || []);
-
-  const useSurfForecast    = surfForecastNorm.length > 0;
+  const useSurfline        = surflineData.length > 0;
   const useStormglass      = stormglassNorm.length > 0;
-  const useOpenMeteo       = openMeteoNorm.length > 0;
 
-  // Table: Surf-Forecast.com (primary, 8/day) → Stormglass (backup, hourly) → Open-Meteo (fallback, hourly)
+  // Surfline is the source of truth. Stormglass stays as backup if Surfline fails.
   let tableData, verdictSource;
-  if (useSurfForecast) {
-    tableData = surfForecastNorm;
-    verdictSource = 'surf-forecast';
+  if (useSurfline) {
+    tableData = surflineData;
+    verdictSource = 'surfline';
   } else if (useStormglass) {
     tableData = stormglassNorm;
     verdictSource = 'stormglass';
   } else {
-    tableData = openMeteoNorm;
-    verdictSource = useOpenMeteo ? 'open-meteo' : 'buoy';
+    tableData = [];
+    verdictSource = 'none';
   }
 
   // Verdict uses the selected day's slice
   const dayData       = getDaySlice(tableData, state.currentDay);
   const verdictInput  = buildVerdictInput(
     dayData,
-    Array.isArray(state.buoyData) ? state.buoyData[0] : state.buoyData,
     verdictSource
   );
   const verdict = calculateVerdict(verdictInput);
@@ -160,12 +140,11 @@ function render() {
     : null;
 
   renderVerdictPanel(verdict, bestTime);
+  renderFridayFocus(tableData, state.forecastData.tides, verdictSource);
+  renderTideChart(tableData, state.forecastData.tides);
 
-  // Forecast table
+  // 5-day summary
   renderForecastTable(tableData, state.forecastData.tides, state.forecastData.conditions);
-
-  // Buoy panel
-  renderBuoyPanel(state.buoyData);
 
   // Update timestamp
   updateTimestamp();
@@ -332,30 +311,11 @@ function getBestInterval(daySlice) {
 
 /**
  * Build a simplified object for the verdict algorithm.
- * sourceHint: 'surfline' | 'open-meteo' | 'buoy'
+ * sourceHint: 'surfline' | 'stormglass'
  */
-function buildVerdictInput(daySlice, buoyData, sourceHint = 'surfline') {
+function buildVerdictInput(daySlice, sourceHint = 'surfline') {
   const interval = getBestInterval(daySlice);
   if (!interval) {
-    // Fall back to buoy data if no Surfline
-    if (buoyData && buoyData.latest) {
-      const b = buoyData.latest;
-      const rawFt  = b.waveHeightFt || 0;
-      const surfFt = isBolinasSpot() ? rawFt * 0.40 : rawFt;
-      const range = isBolinasSpot()
-        ? buildSurfRange(surfFt, 0.8, 1.1)
-        : buildSurfRange(surfFt, 0.9, 1.1);
-      return {
-        spotKey: state.currentSpot,
-        wave:   { min: range.min,
-                  max: range.max,
-                  period: b.dominantPeriod || b.avgPeriod || 0,
-                  swellDir: b.swellDirectionCompass || '' },
-        wind:   { speed: b.windSpeedKts || 0, direction: b.windDirection || '', gust: b.windGustKts || 0, type: '' },
-        tide:   null,
-        source: 'buoy'
-      };
-    }
     return null;
   }
 
@@ -425,24 +385,21 @@ function computeScore(data) {
   } else if (waveMid >= 1.5 && waveMid < 2.5) {
     score += 20;
     reasons.push({ text: `${waveStr} MELLOW ✓`, cls: 'reason-good' });
-  } else if (waveMid >= 2.5 && waveMid <= 4.0) {
+  } else if (waveMid >= 2.5 && waveMid <= 3.8) {
     // JL's ideal zone
     score += 35;
     reasons.push({ text: `${waveStr} PERFECT SIZE`, cls: 'reason-good' });
-  } else if (waveMid > 4.0 && waveMid <= 5.0) {
-    // Getting chunky — JL starts feeling it
-    score -= 10;
-    reasons.push({ text: `${waveStr} GETTING CHUNKY`, cls: 'reason-warn' });
-  } else if (waveMid > 5.0 && waveMid <= 7.0) {
-    // Scary territory
+  } else if (waveMid > 3.8 && waveMid <= 5.0) {
+    score -= 8;
+    reasons.push({ text: `${waveStr} MAYBE TOO BIG`, cls: 'reason-warn' });
+  } else if (waveMid > 5.0 && waveMid <= 6.0) {
     scary = true;
-    score -= 25;
-    reasons.push({ text: `${waveStr} TOO MUCH POWER`, cls: 'reason-bad' });
+    score -= 20;
+    reasons.push({ text: `${waveStr} WORTH A LOOK, MAYBE`, cls: 'reason-warn' });
   } else {
-    // Way too big
     scary = true;
     score -= 40;
-    reasons.push({ text: `${waveStr} TERRIFYING`, cls: 'reason-bad' });
+    reasons.push({ text: `${waveStr} CHECK DORAN INSTEAD`, cls: 'reason-bad' });
   }
 
   if (flat) return { score: Math.max(0, Math.min(100, Math.round(score))), reasons, flat, scary };
@@ -551,9 +508,9 @@ function calculateVerdict(data) {
   const waveMid = data && data.wave ? ((data.wave.min || 0) + (data.wave.max || 0)) / 2 : 0;
   let parking;
   if (waveMid <= 2.0) {
-    parking = { text: 'PARKING LOT: PRETTY EMPTY', cls: 'reason-good' };
+    parking = { text: 'PATCH LOT: MOSTLY BEARDS + GOOD VIBES', cls: 'reason-good' };
   } else {
-    parking = { text: 'PARKING LOT: FULL — WARNING: SHORTBOARDERS IN LOT', cls: 'reason-bad' };
+    parking = { text: 'PATCH LOT: SHORTBOARD CIRCUS POSSIBLE', cls: 'reason-bad' };
   }
 
   return { verdict, score, cls, reasons, source: data ? data.source : null, parking };
@@ -629,12 +586,12 @@ function renderVerdictPanel(verdict, bestTime) {
 
   // Label — condition descriptor + OTH verdict question
   const labels = {
-    epic:     'OTH WOULD GO? // HUGE STOKE — SLOW CLEAN PERFECTION',
-    good:     'OTH WOULD GO? // CONDITIONS FAVORABLE',
-    marginal: 'OTH WOULD GO? // MARGINAL BUT WORTH IT',
-    chunky:   'OTH WOULD GO? // GETTING CHUNKY — TIDE IT OUT',
-    scary:    'OTH WOULD GO? // TOO MUCH POWER IN THE WATER',
-    swim:     'OTH WOULD GO? // SWIM + EXERCISE DAY'
+    epic:     'OTH WOULD GO? // OLD GUY GLIDE ALERT',
+    good:     'OTH WOULD GO? // YES, CALL THE CREW',
+    marginal: 'OTH WOULD GO? // POKE YOUR HEAD OUT',
+    chunky:   'OTH WOULD GO? // MAYBE, BUT KEEP EXPECTATIONS LOW',
+    scary:    'OTH WOULD GO? // HARD PASS, MAYBE DORAN',
+    swim:     'OTH WOULD GO? // COFFEE WALK, NOT A SURF'
   };
   if (labelEl) labelEl.textContent = labels[verdict.cls] || 'OTH WOULD GO?';
 
@@ -645,7 +602,7 @@ function renderVerdictPanel(verdict, bestTime) {
 
   // Reasons + data source tag
   if (reasonEl) {
-    const srcMap = { surfline: 'SURFLINE', stormglass: 'STORMGLASS', 'open-meteo': 'OPEN-METEO', 'surf-forecast': 'SURF-FORECAST.COM', buoy: 'NOAA BUOY (FALLBACK)' };
+    const srcMap = { surfline: 'SURFLINE', stormglass: 'STORMGLASS BACKUP' };
     const srcTag = verdict.source ? `<span class="reason-item reason-neutral">[ SRC: ${srcMap[verdict.source] || verdict.source} ]</span>` : '';
     reasonEl.innerHTML = (verdict.reasons
       ? verdict.reasons.map(r => `<span class="reason-item ${r.cls}">[ ${r.text} ]</span>`).join(' ')
@@ -678,7 +635,7 @@ function renderVerdictPanel(verdict, bestTime) {
       const tideH     = bestTime.tideEntry ? `${bestTime.tideEntry.height.toFixed(1)}FT TIDE` : null;
       let desc = `${waveStr} // ${windDesc}`;
       if (tideH) desc += ` // ${tideH}`;
-      bestEl.innerHTML = `<span class="reason-item reason-good">[ BEST TIME TODAY: ${timeLabel} — ${desc} ]</span>`;
+      bestEl.innerHTML = `<span class="reason-item reason-good">[ BEST GLIDE WINDOW: ${timeLabel} — ${desc} ]</span>`;
     } else {
       bestEl.textContent = '';
     }
@@ -696,10 +653,332 @@ function buildStokeMeter(score) {
   return `[ ${bar} ] ${score}%`;
 }
 
+function renderFridayFocus(intervals, tides, source) {
+  const wrap = document.getElementById('friday-focus-wrap');
+  if (!wrap) return;
 
-// ─── Render: Forecast Table ───────────────────────────────────────────────────
-function renderForecastTable(intervals, tides, conditions) {
-  const wrap = document.getElementById('forecast-table-wrap');
+  const friday = getUpcomingFridayDate();
+  const fridaySlice = getDaySliceForDate(intervals, friday);
+  if (!fridaySlice.length) {
+    wrap.innerHTML = buildErrorBox('NO UPCOMING FRIDAY DATA AVAILABLE');
+    return;
+  }
+
+  const dawnWindow = getSessionWindow(fridaySlice, 6, 9);
+  const session = summarizeWindow(dawnWindow.length ? dawnWindow : fridaySlice, tides, source);
+  const verdict = calculateVerdict(buildVerdictInput(dawnWindow.length ? dawnWindow : fridaySlice, source));
+  const patchCall = buildPatchChannelCall(session);
+  const fridayLabel = friday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+  const tideRange = session.minTide !== null && session.maxTide !== null
+    ? `${session.minTide.toFixed(1)}-${session.maxTide.toFixed(1)} FT`
+    : 'NO TIDE';
+
+  wrap.innerHTML = `
+    <div class="focus-card">
+      <div class="focus-kicker">NEXT FRIDAY // ${escHtml(fridayLabel)}</div>
+      <div class="focus-headline ${verdict.cls}">${escHtml(buildFridayHeadline(verdict, session))}</div>
+      <div class="focus-copy">${escHtml(buildFridayCopy(session, verdict))}</div>
+      <div class="focus-grid">
+        <div class="focus-stat">
+          <div class="focus-stat-label">DAWN WINDOW</div>
+          <div class="focus-stat-value">${escHtml(session.windowLabel)}</div>
+        </div>
+        <div class="focus-stat">
+          <div class="focus-stat-label">STOKE METER</div>
+          <div class="focus-stat-value">${escHtml(`${verdict.score}%`)}</div>
+        </div>
+        <div class="focus-stat">
+          <div class="focus-stat-label">SURF</div>
+          <div class="focus-stat-value">${escHtml(session.waveLabel)}</div>
+        </div>
+        <div class="focus-stat">
+          <div class="focus-stat-label">TIDE RANGE</div>
+          <div class="focus-stat-value">${escHtml(tideRange)}</div>
+        </div>
+      </div>
+      <div class="focus-reasons">${session.reasons.map(r => `<span class="reason-pill ${r.cls}">${escHtml(r.text)}</span>`).join(' ')}</div>
+    </div>
+    <div class="call-card">
+      <div class="call-kicker">PATCH OR CHANNEL // JL THINKS...</div>
+      <div class="call-direction ${patchCall.cls}">${escHtml(patchCall.headline)}</div>
+      <div class="call-copy">${escHtml(patchCall.copy)}</div>
+      <div class="call-reasons">${patchCall.reasons.map(reason => `<div class="reason-line"><strong>•</strong> ${escHtml(reason)}</div>`).join('')}</div>
+    </div>
+  `;
+}
+
+function renderTideChart(intervals, tides) {
+  const wrap = document.getElementById('tide-chart-wrap');
+  if (!wrap) return;
+
+  const targetDate = getDateForOffset(state.currentDay);
+  const dayTides = getDaySliceForDate(tides || [], targetDate);
+  if (!dayTides.length) {
+    wrap.innerHTML = buildErrorBox('NO TIDE DATA AVAILABLE FOR THIS DAY');
+    return;
+  }
+
+  const width = 760;
+  const height = 220;
+  const padX = 34;
+  const padY = 24;
+  const minHeight = Math.min(...dayTides.map(t => t.height));
+  const maxHeight = Math.max(...dayTides.map(t => t.height));
+  const range = Math.max(1, maxHeight - minHeight);
+  const points = dayTides.map((entry, index) => {
+    const x = padX + ((width - padX * 2) * index / Math.max(1, dayTides.length - 1));
+    const y = height - padY - (((entry.height - minHeight) / range) * (height - padY * 2));
+    return { ...entry, x, y };
+  });
+  const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
+  const highlights = points.filter(point => point.type === 'HIGH' || point.type === 'LOW');
+  const label = targetDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+
+  wrap.innerHTML = `
+    <div class="tide-chart-card">
+      <div class="tide-chart-title">TIDE CURVE // ${escHtml(label)}</div>
+      <div class="tide-chart-meta">SURFLINE PRIMARY, NOAA BACKUP. LOW TIDE PATCH WINDOW, HIGH TIDE CHANNEL WINDOW.</div>
+      <svg class="tide-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Tide chart for selected day">
+        <line class="tide-grid" x1="${padX}" y1="${padY}" x2="${padX}" y2="${height - padY}" />
+        <line class="tide-grid" x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" />
+        ${points.filter((_, index) => index % 3 === 0).map(point => `<line class="tide-axis" x1="${point.x}" y1="${height - padY}" x2="${point.x}" y2="${height - padY + 6}" />`).join('')}
+        <path class="tide-line" d="${path}" />
+        ${highlights.map(point => `
+          <circle class="tide-point" cx="${point.x}" cy="${point.y}" r="3.5" />
+          <text class="tide-highlight" x="${point.x + 6}" y="${point.y - 8}">${escHtml(`${point.type} ${point.height.toFixed(1)}FT`)}</text>
+        `).join('')}
+        ${points.filter((_, index) => index % 3 === 0).map(point => `<text class="tide-label" x="${point.x - 12}" y="${height - 6}">${escHtml(formatHourShort(point.timestamp))}</text>`).join('')}
+        <text class="tide-label" x="${padX}" y="${padY - 6}">${escHtml(`${maxHeight.toFixed(1)} FT`)}</text>
+        <text class="tide-label" x="${padX}" y="${height - padY + 16}">${escHtml(`${minHeight.toFixed(1)} FT`)}</text>
+      </svg>
+    </div>
+  `;
+}
+
+function getDateForOffset(dayOffset) {
+  const target = new Date();
+  target.setDate(target.getDate() + dayOffset);
+  return target;
+}
+
+function getUpcomingFridayDate() {
+  const now = new Date();
+  const friday = new Date(now);
+  const diff = (5 - now.getDay() + 7) % 7;
+  friday.setDate(now.getDate() + diff);
+  return friday;
+}
+
+function getDaySliceForDate(intervals, date) {
+  const targetDay = date.toDateString();
+  return (intervals || []).filter(entry => new Date(entry.timestamp * 1000).toDateString() === targetDay);
+}
+
+function getSessionWindow(daySlice, startHour, endHour) {
+  return (daySlice || []).filter(entry => {
+    const hour = new Date(entry.timestamp * 1000).getHours();
+    return hour >= startHour && hour <= endHour;
+  });
+}
+
+function summarizeWindow(entries, tides, source = 'surfline') {
+  const safeEntries = entries || [];
+  const first = safeEntries[0] || null;
+  const last = safeEntries[safeEntries.length - 1] || first;
+  const waveMids = safeEntries.map(entry => ((entry.surf?.min || 0) + (entry.surf?.max || 0)) / 2);
+  const avgWave = waveMids.length ? waveMids.reduce((a, b) => a + b, 0) / waveMids.length : 0;
+  const avgPeriod = average(safeEntries.map(entry => dominantSwell(entry)?.period || 0));
+  const avgPower = average(safeEntries.map(entry => entry.power || 0));
+  const avgWind = average(safeEntries.map(entry => entry.wind?.speed || 0));
+  const tidePoints = safeEntries
+    .map(entry => entry.tide || closestByTimestamp(tides, entry.timestamp))
+    .filter(Boolean);
+  const tideHeights = tidePoints.map(point => point.height);
+  const minTide = tideHeights.length ? Math.min(...tideHeights) : null;
+  const maxTide = tideHeights.length ? Math.max(...tideHeights) : null;
+  const tideDelta = minTide !== null && maxTide !== null ? maxTide - minTide : 0;
+  const tideAverage = average(tideHeights);
+  const windowStart = first ? formatHourLabel(first.timestamp) : '--';
+  const windowEnd = last ? formatHourLabel(last.timestamp) : '--';
+  const best = getBestInterval(safeEntries);
+  const verdict = calculateVerdict(buildVerdictInput(safeEntries, source));
+  const reasons = [];
+
+  if (avgWave >= 1.5 && avgWave <= 3.8) reasons.push({ text: 'LONGBOARD GLIDE SIZE', cls: 'reason-good' });
+  else if (avgWave > 5) reasons.push({ text: 'GETTING PRETTY CHUNKY', cls: 'reason-warn' });
+  else reasons.push({ text: 'SMALL BUT MAYBE CRUISEY', cls: 'reason-neutral' });
+
+  if (avgWind < 4) reasons.push({ text: 'LIGHT WIND', cls: 'reason-good' });
+  else if (avgWind > 10) reasons.push({ text: 'WINDY ENOUGH TO ANNOY OLD MEN', cls: 'reason-bad' });
+
+  if (tideAverage !== null && tideAverage <= 1.2) reasons.push({ text: 'PATCH TIDE WINDOW', cls: 'reason-good' });
+  else if (tideAverage !== null && tideAverage >= 3) reasons.push({ text: 'CHANNEL TIDE WINDOW', cls: 'reason-neutral' });
+
+  return {
+    entries: safeEntries,
+    first,
+    last,
+    avgWave,
+    avgPeriod,
+    avgPower,
+    avgWind,
+    minTide,
+    maxTide,
+    tideAverage,
+    tideDelta,
+    best,
+    verdict,
+    reasons,
+    waveLabel: safeEntries.length ? formatWaveHeightRange(safeEntries) : 'NO SURF DATA',
+    windowLabel: `${windowStart}-${windowEnd}`,
+    bestLabel: best ? `${formatHourLabel(best.timestamp)} // ${formatWaveHeight(best.surf.min, best.surf.max)}` : 'NO CLEAN WINDOW'
+  };
+}
+
+function buildPatchChannelCall(session) {
+  const reasons = [];
+  const avgTide = session.tideAverage;
+  const tideDelta = session.tideDelta;
+  const avgPower = session.avgPower || 0;
+  const avgWave = session.avgWave || 0;
+  let headline;
+  let cls;
+  let copy;
+
+  if (avgTide !== null && avgTide <= 1.2 && avgPower >= 45 && avgWave <= 4.5) {
+    headline = 'LEAN RIGHT // THE PATCH';
+    cls = 'patch';
+    copy = 'JL thinks the Patch should have enough push without making everybody sprint before breakfast.';
+    reasons.push('Lower tide usually opens up the Patch better than the Channel.');
+  } else if (avgTide !== null && avgTide >= 2.8) {
+    headline = tideDelta >= 1.8 ? 'LEAN LEFT // CHANNEL, BUT RIPPY' : 'LEAN LEFT // CHANNEL';
+    cls = 'channel';
+    copy = tideDelta >= 1.8
+      ? 'JL thinks the Channel fits the tide, but somebody is going to complain about the flush.'
+      : 'JL thinks the higher tide points the crew left toward the Channel.';
+    reasons.push('Higher tide generally makes the Channel the safer bet.');
+  } else {
+    headline = 'COIN FLIP // PEEK BOTH SIDES';
+    cls = 'split';
+    copy = 'JL thinks this is a boat-launch decision day: squint, sip coffee, and see which side looks less dumb.';
+    reasons.push('Mid tide can leave both options kinda in play.');
+  }
+
+  if (avgPower < 40) reasons.push('There may not be enough push for a dreamy Patch slide.');
+  else if (avgPower > 140) reasons.push('There is enough water moving around to keep everybody honest.');
+
+  if (tideDelta >= 1.8) reasons.push('Big tide swing means the Channel can feel like a lazy-river punishment session.');
+  if ((session.avgWind || 0) < 4) reasons.push('Light wind helps either call look more civilized.');
+  if ((session.avgWave || 0) > 5) reasons.push('If it feels like a shortboard convention, nobody wins.');
+
+  return { headline, cls, copy, reasons };
+}
+
+function buildFridayHeadline(verdict, session) {
+  if (verdict.cls === 'epic') return 'FRIDAY LOOKS LIKE A PROPER BEARD PATROL';
+  if (verdict.cls === 'good') return 'FRIDAY LOOKS WORTH THE EARLY ALARM';
+  if (verdict.cls === 'marginal') return 'FRIDAY IS A CHECK THE CAM, POUR COFFEE TYPE';
+  if (verdict.cls === 'chunky') return 'FRIDAY MIGHT BE A LITTLE TOO SPICY';
+  if (verdict.cls === 'scary') return 'FRIDAY LOOKS LIKE A SHORTBOARD PROBLEM';
+  return 'FRIDAY LOOKS MORE LIKE A SHORE HANG';
+}
+
+function buildFridayCopy(session, verdict) {
+  const surf = session.waveLabel.toLowerCase();
+  if (verdict.cls === 'scary') return `Dawn patrol is showing ${surf}, and JL is already muttering about protected bays.`;
+  if (verdict.cls === 'chunky') return `Dawn patrol is showing ${surf}. Maybe worth a squint, but keep the heroics in the truck.`;
+  return `Dawn patrol is showing ${surf}. This is the read for the 7-9AM old-guy glide window.`;
+}
+
+function buildForecastCard(date, offset, session, patchCall) {
+  const label = offset === 0
+    ? 'TODAY'
+    : date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+  const verdict = session.verdict;
+  return `
+    <article class="forecast-card ${verdict.cls}">
+      <div class="forecast-card-title">
+        <span>${escHtml(label)}</span>
+        <span class="forecast-card-score">${escHtml(`${verdict.score}%`)}</span>
+      </div>
+      <div class="forecast-meta">${escHtml(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase())}</div>
+      <div class="forecast-card-copy">${escHtml(buildCardCopy(session, verdict))}</div>
+      <div class="forecast-card-grid">
+        <div class="mini">
+          <div class="mini-label">DAWN</div>
+          <div class="mini-value">${escHtml(session.waveLabel)}</div>
+        </div>
+        <div class="mini">
+          <div class="mini-label">PATCH/CALL</div>
+          <div class="mini-value">${escHtml(shortPatchLabel(patchCall.headline))}</div>
+        </div>
+        <div class="mini">
+          <div class="mini-label">BEST SLOT</div>
+          <div class="mini-value">${escHtml(session.bestLabel)}</div>
+        </div>
+        <div class="mini">
+          <div class="mini-label">TIDE</div>
+          <div class="mini-value">${escHtml(session.minTide !== null && session.maxTide !== null ? `${session.minTide.toFixed(1)}-${session.maxTide.toFixed(1)} FT` : 'N/A')}</div>
+        </div>
+      </div>
+      ${session.reasons.slice(0, 2).map(r => `<div class="reason-line">${escHtml(r.text)}</div>`).join('')}
+    </article>
+  `;
+}
+
+function buildCardCopy(session, verdict) {
+  if (verdict.cls === 'epic') return 'Longboarders should stop texting and start waxing.';
+  if (verdict.cls === 'good') return 'Looks surfable without unnecessary drama.';
+  if (verdict.cls === 'marginal') return 'Could still be a very decent hang.';
+  if (verdict.cls === 'chunky') return 'Maybe check it, maybe protect your back.';
+  if (verdict.cls === 'scary') return 'Probably not the move unless somebody got younger overnight.';
+  return 'Might be more coffee than surf.';
+}
+
+function shortPatchLabel(headline) {
+  if (headline.includes('PATCH')) return 'PATCH';
+  if (headline.includes('CHANNEL')) return 'CHANNEL';
+  return 'PEEK BOTH';
+}
+
+function dominantSwell(entry) {
+  return entry && entry.swells && entry.swells.length
+    ? entry.swells.reduce((a, b) => a.height >= b.height ? a : b)
+    : null;
+}
+
+function formatWaveHeightRange(entries) {
+  const mins = entries.map(entry => entry.surf?.min || 0);
+  const maxes = entries.map(entry => entry.surf?.max || 0);
+  return formatWaveHeight(Math.min(...mins), Math.max(...maxes));
+}
+
+function formatHourLabel(timestamp) {
+  const dt = new Date(timestamp * 1000);
+  return `${dt.getHours() % 12 || 12}${dt.getHours() < 12 ? 'AM' : 'PM'}`;
+}
+
+function formatHourShort(timestamp) {
+  const dt = new Date(timestamp * 1000);
+  return `${dt.getHours() % 12 || 12}${dt.getHours() < 12 ? 'A' : 'P'}`;
+}
+
+function closestByTimestamp(entries, timestamp) {
+  if (!entries || !entries.length) return null;
+  return entries.reduce((best, current) =>
+    Math.abs(current.timestamp - timestamp) < Math.abs(best.timestamp - timestamp) ? current : best
+  );
+}
+
+function average(values) {
+  const nums = (values || []).filter(v => v !== null && v !== undefined && !Number.isNaN(v));
+  return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+}
+
+
+// ─── Render: 5-Day Forecast Cards ─────────────────────────────────────────────
+function renderForecastTable(intervals, tides) {
+  const wrap = document.getElementById('forecast-cards-wrap');
   if (!wrap) return;
 
   if (!intervals || intervals.length === 0) {
@@ -707,153 +986,18 @@ function renderForecastTable(intervals, tides, conditions) {
     return;
   }
 
-  // Build one row per interval, grouped visually by day
-  const rows = [];
-  let lastDay = '';
-
-  intervals.forEach(entry => {
-    const dt       = new Date(entry.timestamp * 1000);
-    const dayStr   = dt.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' }).toUpperCase();
-    const hr = dt.getHours();
-    const timeStr  = `${hr % 12 || 12}${hr < 12 ? 'AM' : 'PM'}`;
-    const isToday  = dt.toDateString() === new Date().toDateString();
-    const isNow    = Math.abs(dt - new Date()) < 3 * 60 * 60 * 1000; // within 3h
-
-    const waveMin  = entry.surf ? entry.surf.min : 0;
-    const waveMax  = entry.surf ? entry.surf.max : 0;
-    const waveStr  = formatWaveHeight(waveMin, waveMax);
-
-    // Dominant swell period
-    let period = 0;
-    let swellDir = '---';
-    if (entry.swells && entry.swells.length > 0) {
-      const dom = entry.swells.reduce((a, b) => a.height >= b.height ? a : b);
-      period   = dom.period || 0;
-      swellDir = degToCompass(dom.direction);
-    }
-    const periodStr = period > 0 ? `${period}s` : '---';
-
-    // Wind
-    const windSpeed = entry.wind ? entry.wind.speed         : null;
-    const windType  = entry.wind ? (entry.wind.directionType || '') : '';
-    const wt        = windType.toLowerCase();
-    const windLabel = windSpeed !== null && windSpeed < 3 ? 'glassy' :
-      wt === 'off'    || wt === 'offshore'  ? 'off'   :
-      wt === 'on'     || wt === 'onshore'   ? 'on'    :
-      wt.includes('cross')                  ? 'cross' :
-      wt === 'glass'  || wt === 'glassy'    ? 'glassy':
-      '---';
-    const windStr   = windSpeed !== null ? `${Math.round(windSpeed)} ${windLabel}` : '---';
-
-    // Tide (from entry or closest match in tides array)
-    const tideEntry  = entry.tide || (tides && tides.length
-      ? tides.reduce((best, curr) =>
-          Math.abs(curr.timestamp - entry.timestamp) < Math.abs(best.timestamp - entry.timestamp)
-            ? curr : best)
-      : null);
-    const tideHeight = tideEntry ? tideEntry.height : null;
-    const tideStr    = tideHeight !== null ? `${tideHeight.toFixed(1)}ft` : '----';
-
-    // Star rating: derive from wave + period for display
-    const stars = computeStarRating(waveMin, waveMax, period, windSpeed,
-      entry.wind ? entry.wind.directionType : '');
-
-    // Colour coding tuned for JL: 2-4ft = sweet spot
-    const waveMidRow = (waveMin + waveMax) / 2;
-    let waveCls = 'tbl-data';
-    if (waveMax < 0.5)                      waveCls = 'tbl-swim';   // flat = swim
-    else if (waveMidRow >= 1.5 && waveMidRow <= 4.0) waveCls = 'tbl-good';   // ideal
-    else if (waveMidRow > 4.0 && waveMidRow <= 5.5)  waveCls = 'tbl-amber';  // chunky
-    else if (waveMidRow > 5.5)                        waveCls = 'tbl-poor';   // scary
-
-    // Day separator
-    if (dayStr !== lastDay) {
-      lastDay = dayStr;
-      rows.push({ type: 'separator', day: dayStr, isToday });
-    }
-
-    // Parking lot indicator from Surfline conditions
-    const condEntry = conditions && conditions.find(c =>
-      new Date(c.timestamp * 1000).toDateString() === dt.toDateString()
-    );
-    const condSlot  = condEntry ? (hr < 12 ? condEntry.am : condEntry.pm) : null;
-    const condRel   = condSlot ? (condSlot.humanRelation || '').toUpperCase() : '';
-    const condRating = condSlot ? (condSlot.rating || 0) : 0;
-    let parkStr, parkCls;
-    if (!condSlot) {
-      // No Surfline conditions — fall back to wave height
-      const waveMidRow = (waveMin + waveMax) / 2;
-      if (waveMidRow <= 2.0) {
-        parkStr = 'QUIET LOT'; parkCls = 'tbl-good';
-      } else {
-        parkStr = 'LOT FULL!'; parkCls = 'tbl-poor';
-      }
-    } else if (condRating >= 4 || /GOOD|EXCELLENT|EPIC|GREAT/.test(condRel)) {
-      parkStr = 'PACKED'; parkCls = 'tbl-poor';    // red = bad news for parking
-    } else if (/FAIR TO GOOD|FAIR/.test(condRel) || condRating >= 2.5) {
-      parkStr = 'BUSY'; parkCls = 'tbl-amber';
-    } else {
-      parkStr = "FRANK'S?"; parkCls = 'tbl-good';  // green = parking available
-    }
-
-    rows.push({
-      type: 'data',
-      dayStr, timeStr, waveStr, periodStr, windStr, tideStr, stars, waveCls,
-      parkStr, parkCls,
-      isNow
-    });
-  });
-
-  // Build ASCII table string
-  const COL_DATE   = 11;
-  const COL_TIME   = 6;
-  const COL_WAVES  = 13;  // "10.5-13.5 FT" = 12 chars, needs ≥1 padding
-  const COL_PERIOD = 8;
-  const COL_WIND   = 12;
-  const COL_TIDE   = 7;
-  const COL_STARS  = 7;
-  const COL_PARK   = 10;  // "FRANK'S?" = 8 chars
-
-  function pad(s, len) {
-    const str = String(s);
-    return str.length >= len ? str.slice(0, len) : str + ' '.repeat(len - str.length);
+  const cards = [];
+  for (let offset = 0; offset <= 4; offset++) {
+    const daySlice = getDaySlice(intervals, offset);
+    if (!daySlice.length) continue;
+    const targetDate = getDateForOffset(offset);
+    const dawn = getSessionWindow(daySlice, 6, 9);
+    const session = summarizeWindow(dawn.length ? dawn : daySlice, tides, intervals[0]?.power !== undefined ? 'surfline' : 'stormglass');
+    const patchCall = buildPatchChannelCall(session);
+    cards.push(buildForecastCard(targetDate, offset, session, patchCall));
   }
 
-  const totalW = COL_DATE + COL_TIME + COL_WAVES + COL_PERIOD + COL_WIND + COL_TIDE + COL_STARS + COL_PARK + 16;
-
-  const TOP    = '╔' + '═'.repeat(totalW) + '╗';
-  const HDR_SEP= '╠' + '═'.repeat(totalW) + '╣';
-  const DAY_SEP= '╟' + '─'.repeat(totalW) + '╢';
-  const BOT    = '╚' + '═'.repeat(totalW) + '╝';
-
-  let html = `<pre class="forecast-table">`;
-  html += `<span class="tbl-border">${escHtml(TOP)}\n</span>`;
-  html += `<span class="tbl-header">║  ${pad('DATE',COL_DATE)}${pad('TIME',COL_TIME)}  ${pad('WAVES',COL_WAVES)}${pad('PERIOD',COL_PERIOD)}${pad('WIND (KT)',COL_WIND)}${pad('TIDE',COL_TIDE)}${pad('RATING',COL_STARS)}${pad('PARKING',COL_PARK)}  ║\n</span>`;
-  html += `<span class="tbl-border">${escHtml(HDR_SEP)}\n</span>`;
-
-  rows.forEach(row => {
-    if (row.type === 'separator') {
-      html += `<span class="tbl-border">${escHtml(DAY_SEP)}\n</span>`;
-      const label = row.isToday ? `── ${row.day} (TODAY) ──` : `── ${row.day} ──`;
-      html += `<span class="tbl-header">║  ${pad(label, totalW - 2)}║\n</span>`;
-    } else {
-      const cls    = row.isNow ? 'tbl-current' : '';
-      const prefix = row.isNow ? '▶ ' : '  ';
-      html += `<span class="tbl-border ${cls}">║</span>`;
-      html += `<span class="tbl-data ${cls}">${prefix}${pad(row.timeStr, COL_DATE + COL_TIME)}`;
-      html += `  </span><span class="${row.waveCls} ${cls}">${pad(row.waveStr, COL_WAVES)}</span>`;
-      html += `<span class="tbl-data ${cls}">${pad(row.periodStr, COL_PERIOD)}`;
-      html += `${pad(row.windStr, COL_WIND)}${pad(row.tideStr, COL_TIDE)}</span>`;
-      html += `<span class="tbl-data ${cls}">${renderStars(row.stars)}  </span>`;
-      html += `<span class="${row.parkCls} ${cls}">${pad(row.parkStr, COL_PARK)}  </span>`;
-      html += `<span class="tbl-border ${cls}">║\n</span>`;
-    }
-  });
-
-  html += `<span class="tbl-border">${escHtml(BOT)}\n</span>`;
-  html += `</pre>`;
-
-  wrap.innerHTML = html;
+  wrap.innerHTML = cards.join('');
 }
 
 function computeStarRating(waveMin, waveMax, period, windSpeed, windType) {
@@ -947,14 +1091,24 @@ function buildBuoyCard(buoyData) {
 
 // ─── Render: Error ────────────────────────────────────────────────────────────
 function renderError(message) {
-  const wrap = document.getElementById('forecast-table-wrap');
+  const wrap = document.getElementById('forecast-cards-wrap');
   if (wrap) {
     wrap.innerHTML = buildErrorBox(`DATA FEED ERROR: ${message}`);
   }
 
+  const friday = document.getElementById('friday-focus-wrap');
+  if (friday) {
+    friday.innerHTML = buildErrorBox(`FRIDAY CHECK FAILED: ${message}`);
+  }
+
+  const tide = document.getElementById('tide-chart-wrap');
+  if (tide) {
+    tide.innerHTML = buildErrorBox(`TIDE CURVE OFFLINE: ${message}`);
+  }
+
   const verdictBox = document.getElementById('verdict-box');
   if (verdictBox) {
-    verdictBox.className = 'poor';
+    verdictBox.className = 'scary';
     const vt = document.getElementById('verdict-text');
     if (vt) vt.textContent = '[ ERROR: SURF DATA UNAVAILABLE ]';
   }
@@ -1074,12 +1228,11 @@ function updateTimestamp() {
 
 // ─── NES Canvas Animation ─────────────────────────────────────────────────────
 //
-// Pixel-art longboarder cruising in the pocket of a slow, clean wave.
-// NES-style: 4px per logical pixel, flat colors, crisp edges, ~3fps sprite.
-// Beach palette — colorblind friendly (no red/green reliance).
+// Pixel-art longboarder cruising on a slow shoulder.
+// Slightly finer than the original pass, still retro and intentionally chunky.
 
 const NES = {
-  PX:  4,    // logical pixel → screen pixel scale
+  PX:  3,    // logical pixel → screen pixel scale
   FPS: 1.5,  // sprite animation FPS (slow, lazy longboard feel)
 };
 
@@ -1103,8 +1256,8 @@ const C = {
   // Surfer — bald guy with big gray beard
   bald:   '#c87848',  // sun-burned bald pate (darker, more distinct)
   skin:   '#e8b068',  // warm golden skin
-  beard:  '#c8c8c4',  // gray beard — light so it reads clearly
-  beardD: '#909090',  // beard shadow
+  beard:  '#d9d9d4',  // gray beard — light so it reads clearly
+  beardD: '#8c8c88',  // beard shadow
   suit:   '#1e4880',  // wetsuit blue
   suitD:  '#142e58',  // dark wetsuit shadow
   board:  '#e8cc3a',  // yellow longboard
@@ -1200,14 +1353,13 @@ function drawScene(canvas, t) {
 
   // Subtle bob — ±1 row only
   const bob      = Math.round(Math.sin(t * 0.0009) * 1);
-  // Wave peak is BEHIND the surfer (negative dist = screen-left).
-  // Surfer rides the right face — the downslope past the peak.
-  const peakNY   = Math.floor(NH * 0.33);   // wave peak height
-  const faceNY   = Math.floor(NH * 0.58);   // surfer's position on right face
-  const wwNY     = Math.floor(NH * 0.66);   // settled whitewater level (left of peak)
+  // A long, crumbly shoulder instead of a steep pitching peak.
+  const peakNY   = Math.floor(NH * 0.38);
+  const faceNY   = Math.floor(NH * 0.57);
+  const wwNY     = Math.floor(NH * 0.65);
   const flatNY   = NH - 4;
-  const peakDist = -10;                      // peak is 10 cols behind surfer
-  const wwBndry  = peakDist - 10;           // whitewater starts 10 cols left of peak
+  const peakDist = -13;
+  const wwBndry  = peakDist - 8;
   const surferFaceY = faceNY + bob;
 
   // Wave surface height for any canvas column.
@@ -1217,7 +1369,7 @@ function drawScene(canvas, t) {
     const dist = surferNX - nx;
     if (dist < wwBndry) {
       // Far left: settled broken water, slopes to flat
-      const beyond = Math.min(1, (wwBndry - dist) / 14);
+      const beyond = Math.min(1, (wwBndry - dist) / 18);
       return Math.round(wwNY + (flatNY - wwNY) * beyond);
     } else if (dist < peakDist) {
       // Left of peak: wave face rising toward peak
@@ -1229,9 +1381,9 @@ function drawScene(canvas, t) {
       return Math.round(peakNY + (faceNY - peakNY) * frac);
     } else if (dist <= 3) {
       return faceNY;                         // at surfer
-    } else if (dist <= 26) {
+    } else if (dist <= 34) {
       // Open shoulder: gentle slope back to flat
-      const frac = (dist - 3) / 23;
+      const frac = (dist - 3) / 31;
       return Math.round(faceNY + (flatNY - faceNY) * frac);
     } else {
       return flatNY;
@@ -1279,7 +1431,7 @@ function drawScene(canvas, t) {
     }
 
     // ── Spray above the peak ──────────────────────────────────────────────
-    if (atPeak && dist >= peakDist && dist < peakDist + 3) {
+    if (atPeak && dist >= peakDist && dist < peakDist + 2) {
       for (let sy = 1; sy <= 3; sy++) {
         const n = ((nx * 5 + sy * 11 + Math.floor(scrollN * 3)) % 9);
         if (n < 4) {

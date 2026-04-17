@@ -33,11 +33,11 @@ async function safeFetch(url) {
 }
 
 /**
- * Returns wave forecast for next 5 days in 3-hour intervals.
+ * Returns wave forecast for next 7 days in 3-hour intervals.
  * Shape: { data: { wave: [ { timestamp, surf: { min, max, humanRelation, rawMin, rawMax }, power, swells: [...] } ] } }
  */
 async function getWaveForecast(spotId) {
-  const url = `${BASE}/wave?spotId=${spotId}&days=5&intervalHours=3`;
+  const url = `${BASE}/wave?spotId=${spotId}&days=7&intervalHours=3`;
   const raw = await safeFetch(url);
   const intervals = (raw.data && raw.data.wave) ? raw.data.wave : [];
   return intervals.map(entry => ({
@@ -65,7 +65,7 @@ async function getWaveForecast(spotId) {
  * Shape: [ { timestamp, speed, direction, directionType, gust, optimalScore } ]
  */
 async function getWindForecast(spotId) {
-  const url = `${BASE}/wind?spotId=${spotId}&days=5&intervalHours=3`;
+  const url = `${BASE}/wind?spotId=${spotId}&days=7&intervalHours=3`;
   const raw = await safeFetch(url);
   const intervals = (raw.data && raw.data.wind) ? raw.data.wind : [];
   return intervals.map(entry => ({
@@ -83,7 +83,7 @@ async function getWindForecast(spotId) {
  * Shape: [ { timestamp, height, type } ]
  */
 async function getTideForecast(spotId) {
-  const url = `${BASE}/tides?spotId=${spotId}&days=5`;
+  const url = `${BASE}/tides?spotId=${spotId}&days=7`;
   const raw = await safeFetch(url);
   const intervals = (raw.data && raw.data.tides) ? raw.data.tides : [];
   return intervals.map(entry => ({
@@ -98,7 +98,7 @@ async function getTideForecast(spotId) {
  * Shape: [ { timestamp, am: { rating, humanRelation }, pm: { rating, humanRelation } } ]
  */
 async function getConditions(spotId) {
-  const url = `${BASE}/conditions?spotId=${spotId}&days=5`;
+  const url = `${BASE}/conditions?spotId=${spotId}&days=7`;
   const raw = await safeFetch(url);
   const intervals = (raw.data && raw.data.conditions) ? raw.data.conditions : [];
   return intervals.map(entry => ({

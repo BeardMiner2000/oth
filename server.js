@@ -9,8 +9,6 @@ const NodeCache = require('node-cache');
 
 const surfline    = require('./scrapers/surfline');
 const noaa        = require('./scrapers/noaa');
-const surfForecast = require('./scrapers/surfForecast');
-const openMeteo   = require('./scrapers/openMeteo');
 const stormglass  = require('./scrapers/stormglass');
 
 const DEFAULT_CORS_ORIGINS = [
@@ -124,16 +122,15 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       console.log(`[STORMGLASS] Call ${stormglassCallCount}/${STORMGLASS_DAILY_LIMIT}`);
     }
 
-    // Fetch Surfline + Open-Meteo + Stormglass + NOAA tides in parallel; tolerate partial failures
-    const [waveResult, windResult, tideResult, condResult, meteoResult, stormglassResult, noaaTideResult] = await Promise.allSettled([
+    // Fetch Surfline + Stormglass backup + NOAA tide fallback in parallel; tolerate partial failures
+    const [waveResult, windResult, tideResult, condResult, stormglassResult, noaaTideResult] = await Promise.allSettled([
       surfline.getWaveForecast(spotMeta.id),
       surfline.getWindForecast(spotMeta.id),
       surfline.getTideForecast(spotMeta.id),
       surfline.getConditions(spotMeta.id),
-      openMeteo.getMarineForecast(spotMeta.lat, spotMeta.lon),
       canCallStormglass && process.env.STORMGLASS_API_KEY
         ? stormglass.getMarineForecast(spotMeta.lat, spotMeta.lon, process.env.STORMGLASS_API_KEY)
-        : Promise.resolve([]),  // Skip Stormglass if rate limit hit; fall back to Open-Meteo
+        : Promise.resolve([]),
       noaaTideStation
         ? noaa.getTidePredictions(noaaTideStation)
         : Promise.resolve([])
@@ -145,7 +142,6 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
     const noaaTides  = noaaTideResult.status === 'fulfilled' ? noaaTideResult.value : [];
     const tides      = sfTides.length > 0 ? sfTides : noaaTides;   // prefer Surfline tides
     const conds      = condResult.status  === 'fulfilled' ? condResult.value      : [];
-    const meteo      = meteoResult.status === 'fulfilled' ? meteoResult.value     : [];
     const stormglassData = stormglassResult.status === 'fulfilled' ? stormglassResult.value : [];
 
     // Merge wave + wind by timestamp
@@ -154,45 +150,12 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       tide: closestTide(tides, entry.timestamp)
     }));
 
-    // Fetch surf-forecast.com — supports single slug or array (merge multiple breaks)
-    let sfData = { data: [], individual: [], error: null };
-    const sfSlugs = surfForecast.SURF_FORECAST_SLUGS[spotKey];
-    if (sfSlugs) {
-      try {
-        const slugList = Array.isArray(sfSlugs) ? sfSlugs : [sfSlugs];
-        const sfResults = await Promise.allSettled(
-          slugList.map(s => surfForecast.scrapeSpotForecast(s))
-        );
-        const successful = sfResults
-          .filter(r => r.status === 'fulfilled' && r.value.data.length > 0)
-          .map(r => r.value);
-        if (successful.length > 0) {
-          const successfulData = successful.map(s => s.data);
-          sfData = {
-            data:       surfForecast.mergeIntervals(successfulData),
-            individual: successful,  // keep individual break data for display
-            error:      null,
-            fetchedAt:  new Date().toISOString()
-          };
-        } else {
-          const firstErr = sfResults.find(r => r.status === 'rejected' || r.value.error);
-          sfData.error = firstErr
-            ? (firstErr.reason?.message || firstErr.value?.error || 'No data')
-            : 'No data returned';
-        }
-      } catch (e) {
-        sfData.error = e.message;
-      }
-    }
-
     const payload = {
       spot:           spotMeta,
       surfline:       merged,
       tides,
       conditions:     conds,
-      openMeteo:      meteo,
       stormglass:     stormglassData,
-      surfForecast:   sfData,
       fetchedAt:      new Date().toISOString(),
       cached:         false,
       errors: {
@@ -200,7 +163,6 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
         wind:  windResult.status  === 'rejected' ? windResult.reason?.message  : null,
         tide:  tideResult.status  === 'rejected' ? tideResult.reason?.message  : null,
         cond:  condResult.status  === 'rejected' ? condResult.reason?.message  : null,
-        meteo: meteoResult.status === 'rejected' ? meteoResult.reason?.message : null,
         stormglass: stormglassResult.status === 'rejected' ? stormglassResult.reason?.message : null
       }
     };
