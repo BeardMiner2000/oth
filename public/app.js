@@ -718,10 +718,10 @@ function renderFridayFocus(intervals, tides, source) {
   const wrap = document.getElementById('friday-focus-wrap');
   if (!wrap) return;
 
-  const friday = getUpcomingFridayDate();
+  const { date: friday, isCurrentFriday } = getUpcomingFridayDate();
   const fridaySlice = getDaySliceForDate(intervals, friday);
   if (!fridaySlice.length) {
-    wrap.innerHTML = buildErrorBox('NO UPCOMING FRIDAY DATA AVAILABLE');
+    wrap.innerHTML = buildErrorBox('NO FRIDAY DAWN PATROL DATA AVAILABLE');
     return;
   }
 
@@ -733,10 +733,11 @@ function renderFridayFocus(intervals, tides, source) {
   const tideRange = session.minTide !== null && session.maxTide !== null
     ? `${session.minTide.toFixed(1)}-${session.maxTide.toFixed(1)} FT`
     : 'NO TIDE';
+  const fridayKicker = isCurrentFriday ? 'THIS FRIDAY' : 'NEXT FRIDAY';
 
   wrap.innerHTML = `
     <div class="focus-card">
-      <div class="focus-kicker">NEXT FRIDAY // ${escHtml(fridayLabel)}</div>
+      <div class="focus-kicker">${escHtml(fridayKicker)} // ${escHtml(fridayLabel)}</div>
       <div class="focus-headline ${verdict.cls}">${escHtml(buildFridayHeadline(verdict, session))}</div>
       <div class="focus-copy">${escHtml(buildFridayCopy(session, verdict))}</div>
       <div class="focus-grid">
@@ -800,6 +801,7 @@ function renderTideChart(intervals, tides) {
     const y = height - padY - (((heightMark - axisMin) / range) * (height - padY * 2));
     yTicks.push({ value: heightMark, y });
   }
+  const tideEvents = dayTides.filter(point => point.type === 'HIGH' || point.type === 'LOW');
   const hourTicks = points.filter((point, index) => {
     const hour = getPacificHour(point.timestamp);
     const minute = getPacificMinute(point.timestamp);
@@ -832,6 +834,9 @@ function renderTideChart(intervals, tides) {
         `).join('')}
         ${hourTicks.map(point => `<text class="tide-label tide-time-label" x="${point.x}" y="${height - 6}">${escHtml(formatHourShort(point.timestamp))}</text>`).join('')}
       </svg>
+      <div class="tide-events">
+        ${tideEvents.map(point => `<span class="tide-event ${point.type === 'LOW' ? 'low' : 'high'}">${escHtml(`${point.type} ${formatTimestamp(point.timestamp)} ${point.height.toFixed(1)}FT`)}</span>`).join('')}
+      </div>
     </div>
   `;
 }
@@ -845,7 +850,10 @@ function getUpcomingFridayDate() {
   const friday = new Date(today);
   const diff = (5 - today.getUTCDay() + 7) % 7;
   friday.setUTCDate(today.getUTCDate() + diff);
-  return friday;
+  return {
+    date: friday,
+    isCurrentFriday: diff === 0
+  };
 }
 
 function getDaySliceForDate(intervals, date) {
@@ -1314,7 +1322,7 @@ function updateTimestamp() {
 // Slightly finer than the original pass, still retro and intentionally chunky.
 
 const NES = {
-  PX:  3,    // logical pixel → screen pixel scale
+  PX:  4,    // logical pixel → screen pixel scale
   FPS: 1.5,  // sprite animation FPS (slow, lazy longboard feel)
 };
 
@@ -1347,55 +1355,54 @@ const C = {
   wax:    '#f0ead8',  // deck wax / feet
 };
 
-// ── Surfer sprite: 2 frames, 18×16 logical pixels ────────────────────────────
+// ── Surfer sprite: 2 frames, 20×18 logical pixels ────────────────────────────
 // Left-facing in canvas space → right-facing after horizontal mirror.
-// Column 0 = nose end (screen right, direction of travel).
-// Columns 0-6: body over the nose. Columns 0-17: long board.
-// Big bald dome, massive gray beard, noserider stance.
+// Big bald dome, huge gray beard, lazy noserider stance on a long yellow board.
 const FRAMES = [
-  // Frame 0 — arms out wide for balance on the nose
   [
-    //0       1       2       3       4       5       6       7  …17
-    [null,  null,  'bald','bald','bald','bald', null,  null,  null,null,null,null,null,null,null,null,null,null], // dome top
-    ['bald','bald','bald','bald','bald','bald','bald', null,  null,null,null,null,null,null,null,null,null,null], // dome wide
-    ['skin','skin','skin','skin','skin','skin','bald', null,  null,null,null,null,null,null,null,null,null,null], // face
-    ['beard','beard','skin','skin','skin','suit',null, null,  null,null,null,null,null,null,null,null,null,null], // chin
-    ['beard','beard','beard','beard','beard','suit','suit',null,null,null,null,null,null,null,null,null,null,null], // beard
-    ['beard','beard','beard','beard','beard','beard','suit',null,null,null,null,null,null,null,null,null,null,null], // beard peak
-    ['beard','beard','beard','beard','beard','beard',null,null,null,null,null,null,null,null,null,null,null,null], // widest
-    [null,'beard','beard','beard','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null],   // beard base
-    [null,'suit','suit','suit','suit','suit','suit', null,null,null,null,null,null,null,null,null,null,null],     // torso
-    ['skin','suit','suit','suit','suit',null,'skin',null,null,null,null,null,null,null,null,null,null,null],      // arms wide
-    [null, null,'suit','suit','suit', null, null,  null,null,null,null,null,null,null,null,null,null,null],       // lower body
-    [null,'suitD','suit','suitD',null, null, null,  null,null,null,null,null,null,null,null,null,null,null],      // knees
-    ['suitD','suit',null,'suit', null, null, null,  null,null,null,null,null,null,null,null,null,null,null],      // legs
-    ['wax','wax',  null,'wax',  null, null, null,  null,null,null,null,null,null,null,null,null,null,null],       // feet at nose
-    ['board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','boardD'], // longboard deck
-    [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD',null], // board underside
+    [null,null,null,'bald','bald','bald','bald','bald',null,null,null,null,null,null,null,null,null,null,null,null],
+    [null,null,'bald','bald','bald','bald','bald','bald','bald',null,null,null,null,null,null,null,null,null,null,null],
+    [null,null,'bald','bald','bald','skin','skin','skin','bald',null,null,null,null,null,null,null,null,null,null,null],
+    [null,'skin','skin','skin','skin','skin','skin','skin','skin',null,null,null,null,null,null,null,null,null,null,null],
+    [null,'beardD','beard','beard','skin','skin','skin','skin','suit',null,null,null,null,null,null,null,null,null,null,null],
+    ['beard','beard','beard','beard','beard','beard','beard','suit','suit','skin',null,null,null,null,null,null,null,null,null,null],
+    ['beard','beard','beard','beard','beard','beard','beard','beard','suit','suit','skin',null,null,null,null,null,null,null,null,null],
+    [null,'beard','beard','beard','beard','beard','beard','beard','suit','suit',null,null,null,null,null,null,null,null,null,null],
+    [null,null,'beard','beard','beard','beard','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null],
+    ['skin',null,'suit','suit','suit','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null],
+    [null,null,'suit','suit','suit','suit','suit','suit','suit','skin',null,null,null,null,null,null,null,null,null,null],
+    [null,'skin','suit','suit','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null,null],
+    [null,null,'suitD','suit','suit','suitD','suit','suit',null,null,null,null,null,null,null,null,null,null,null,null],
+    [null,'suitD','suit',null,'suit','suit',null,'suit','suitD',null,null,null,null,null,null,null,null,null,null,null],
+    ['wax','wax',null,null,'wax','wax',null,null,null,null,null,null,null,null,null,null,null,null,null,null],
+    ['board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','boardD'],
+    [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD',null],
+    [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
   ],
-  // Frame 1 — arms shift, lazy weight adjustment
   [
-    [null,  null,  'bald','bald','bald','bald', null,  null,  null,null,null,null,null,null,null,null,null,null],
-    ['bald','bald','bald','bald','bald','bald','bald', null,  null,null,null,null,null,null,null,null,null,null],
-    ['skin','skin','skin','skin','skin','skin','bald', null,  null,null,null,null,null,null,null,null,null,null],
-    ['beard','beard','skin','skin','skin','suit',null, null,  null,null,null,null,null,null,null,null,null,null],
-    ['beard','beard','beard','beard','beard','suit','suit',null,null,null,null,null,null,null,null,null,null,null],
-    ['beard','beard','beard','beard','beard','beard','suit',null,null,null,null,null,null,null,null,null,null,null],
-    ['beard','beard','beard','beard','beard','beard',null,null,null,null,null,null,null,null,null,null,null,null],
-    [null,'beard','beard','beard','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null],
-    [null,'suit','suit','suit','suit','suit','suit', null,null,null,null,null,null,null,null,null,null,null],
-    [null,'skin','suit','suit','suit','suit',null,'skin',null,null,null,null,null,null,null,null,null,null],       // arms shifted
-    [null, null,'suit','suit','suit', null, null,  null,null,null,null,null,null,null,null,null,null,null],
-    [null,'suitD','suit','suitD',null, null, null,  null,null,null,null,null,null,null,null,null,null,null],
-    ['suitD','suit',null,'suit', null, null, null,  null,null,null,null,null,null,null,null,null,null,null],
-    ['wax','wax',  null,'wax',  null, null, null,  null,null,null,null,null,null,null,null,null,null,null],
-    ['board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','boardD'],
-    [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD',null],
+    [null,null,null,'bald','bald','bald','bald','bald',null,null,null,null,null,null,null,null,null,null,null,null],
+    [null,null,'bald','bald','bald','bald','bald','bald','bald',null,null,null,null,null,null,null,null,null,null,null],
+    [null,null,'bald','bald','bald','skin','skin','skin','bald',null,null,null,null,null,null,null,null,null,null,null],
+    [null,'skin','skin','skin','skin','skin','skin','skin','skin',null,null,null,null,null,null,null,null,null,null,null],
+    [null,'beardD','beard','beard','skin','skin','skin','skin','suit',null,null,null,null,null,null,null,null,null,null,null],
+    ['beard','beard','beard','beard','beard','beard','beard','suit','suit',null,'skin',null,null,null,null,null,null,null,null,null],
+    ['beard','beard','beard','beard','beard','beard','beard','beard','suit','suit',null,'skin',null,null,null,null,null,null,null,null],
+    [null,'beard','beard','beard','beard','beard','beard','beard','suit','suit',null,null,null,null,null,null,null,null,null,null],
+    [null,null,'beard','beard','beard','beard','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null],
+    [null,'skin','suit','suit','suit','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null],
+    [null,null,'suit','suit','suit','suit','suit','suit','suit','skin',null,null,null,null,null,null,null,null,null,null],
+    [null,null,'skin','suit','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null,null],
+    [null,'suitD','suit','suit','suitD','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null,null],
+    [null,'suitD','suit',null,'suit','suit',null,'suit','suitD',null,null,null,null,null,null,null,null,null,null,null],
+    ['wax','wax',null,null,'wax','wax',null,null,null,null,null,null,null,null,null,null,null,null,null,null],
+    ['board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','boardD'],
+    [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD',null],
+    [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
   ],
 ];
 
-const SPRITE_W = 18;
-const SPRITE_H = 16;
+const SPRITE_W = 20;
+const SPRITE_H = 18;
 
 function drawSprite(ctx, frame, x, y) {
   const rows = FRAMES[frame % FRAMES.length];
@@ -1422,56 +1429,44 @@ function drawScene(canvas, t) {
   const NW = Math.ceil(W / PX);
   const NH = Math.ceil(H / PX);
 
-  // Foam animation scroll (~12s per full cycle)
-  const scrollPx = (t * 0.000083) % 1;
+  const scrollPx = (t * 0.00009) % 1;
   const scrollN  = Math.floor(scrollPx * NW);
 
-  // ── Horizontal ride: surfer glides from left to right across canvas (25s) ──
-  // In canvas space (flipped), surferNX decreases as surfer moves visually right.
-  const rideDur     = 25000;
-  const rideProgress = (t % rideDur) / rideDur;         // 0→1
-  const surferNX    = Math.floor(NW * (0.78 - rideProgress * 0.44));
-  // Visual position: starts ~22% from left, reaches ~66% from left, then resets.
+  // A slow glide across a small peeling shoulder.
+  const rideDur = 26000;
+  const rideProgress = (t % rideDur) / rideDur;
+  const surferNX = Math.floor(NW * (0.78 - rideProgress * 0.42));
+  const bob = Math.round(Math.sin(t * 0.001) * 1);
+  const horizonNY = Math.floor(NH * 0.27);
+  const flatNY = NH - 4;
+  const shoulderBase = Math.floor(NH * 0.59);
+  const lipTop = Math.floor(NH * 0.42);
+  const foamBase = Math.floor(NH * 0.57);
+  const whitewaterFloor = Math.floor(NH * 0.67);
+  const pocketDist = -6;
+  const foamStartDist = pocketDist - 12;
+  const shoulderRun = 54;
+  const surferFaceY = shoulderBase + bob - 1;
 
-  // Subtle bob — ±1 row only
-  const bob      = Math.round(Math.sin(t * 0.0009) * 1);
-  // A lower, peeling shoulder instead of a mountain peak.
-  const peakNY   = Math.floor(NH * 0.46);
-  const faceNY   = Math.floor(NH * 0.58);
-  const wwNY     = Math.floor(NH * 0.63);
-  const flatNY   = NH - 4;
-  const peakDist = -9;
-  const wwBndry  = peakDist - 10;
-  const surferFaceY = faceNY + bob;
-
-  // Wave surface height for any canvas column.
-  // dist = surferNX - nx: positive = to surfer's right on screen (open shoulder),
-  //                       negative = to surfer's left on screen (broken, behind).
   function waveSurface(nx) {
     const dist = surferNX - nx;
-    if (dist < wwBndry) {
-      // Far left: settled broken water, slopes to flat
-      const beyond = Math.min(1, (wwBndry - dist) / 18);
-      return Math.round(wwNY + (flatNY - wwNY) * beyond);
-    } else if (dist < peakDist) {
-      // Whitewater shoulder rises gently toward the lip.
-      const frac = (dist - wwBndry) / (peakDist - wwBndry);
-      return Math.round(wwNY - (wwNY - (peakNY + 1)) * frac);
-    } else if (dist < -2) {
-      // Lip stands up briefly before feathering over.
-      const frac = (dist - peakDist) / 7;
-      return Math.round(peakNY + frac);
-    } else if (dist <= 5) {
-      // Surfer glides just under a soft breaking lip.
-      const frac = (dist + 2) / 7;
-      return Math.round((peakNY + 2) + (faceNY - peakNY - 2) * frac);
-    } else if (dist <= 40) {
-      // Long, open shoulder back to flat water.
-      const frac = (dist - 5) / 35;
-      return Math.round(faceNY + (flatNY - faceNY) * frac);
-    } else {
-      return flatNY;
+    if (dist < foamStartDist) {
+      const frac = Math.min(1, (foamStartDist - dist) / 22);
+      return Math.round(whitewaterFloor + (flatNY - whitewaterFloor) * frac);
     }
+    if (dist < pocketDist) {
+      const frac = (dist - foamStartDist) / (pocketDist - foamStartDist);
+      return Math.round(foamBase - (foamBase - lipTop) * frac);
+    }
+    if (dist < 4) {
+      const frac = (dist - pocketDist) / (4 - pocketDist);
+      return Math.round(lipTop + (shoulderBase - lipTop) * frac);
+    }
+    if (dist < shoulderRun) {
+      const frac = (dist - 4) / (shoulderRun - 4);
+      return Math.round(shoulderBase + (flatNY - shoulderBase) * frac);
+    }
+    return flatNY;
   }
 
   // ── Mirror entire scene: surfer faces right, wave breaks left (behind him) ──
@@ -1491,62 +1486,60 @@ function drawScene(canvas, t) {
   ctx.fillStyle = C.horiz;
   ctx.fillRect(0, 5 * PX, W, PX);
   ctx.fillStyle = C.far;
-  ctx.fillRect(0, 6 * PX, W, 3 * PX);
+  ctx.fillRect(0, 6 * PX, W, Math.max(PX * 2, (horizonNY - 6) * PX));
 
   // ── Wave columns ──────────────────────────────────────────────────────────
   for (let nx = 0; nx < NW; nx++) {
-    const dist     = surferNX - nx;  // flipped to match waveSurface
-    const crestNY  = waveSurface(nx);
-    const x        = nx * PX;
+    const dist = surferNX - nx;
+    const crestNY = waveSurface(nx);
+    const x = nx * PX;
+    const inWhitewater = dist < foamStartDist;
+    const inPocket = dist >= foamStartDist && dist < 1;
+    const onShoulder = dist >= 1 && dist < shoulderRun;
 
-    // Zone classification based on position relative to peak and surfer
-    const isWhitewater = dist < wwBndry;
-    const isLeftFace   = dist >= wwBndry && dist < peakDist;
-    const atPeak       = dist >= peakDist && dist < 0;
-    const isRightFace  = dist >= 0 && dist <= 5;
-    const isShoulder   = dist > 5;
-
-    // ── Lip foam at the peak (behind surfer, wave breaking there) ────────
-    if (atPeak) {
-      ctx.fillStyle = '#ffffff';
+    if (dist >= pocketDist - 1 && dist <= 0) {
+      ctx.fillStyle = C.foam2;
       ctx.fillRect(x, crestNY * PX, PX, PX);
       ctx.fillStyle = C.foam1;
       ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
-      if (dist > peakDist + 2) {
-        ctx.fillRect(x, (crestNY + 2) * PX, PX, PX);
+      ctx.fillRect(x, (crestNY + 2) * PX, PX, PX);
+      const lipOverhang = Math.max(0, Math.round((0 - dist) / 2));
+      if (lipOverhang > 0) {
+        ctx.fillStyle = C.spray;
+        ctx.fillRect(x, Math.max(0, crestNY - 1) * PX, PX, PX);
       }
     }
 
-    // ── Spray above the peak ──────────────────────────────────────────────
-    if (atPeak && dist >= peakDist && dist < peakDist + 3) {
-      for (let sy = 1; sy <= 3; sy++) {
-        const n = ((nx * 5 + sy * 11 + Math.floor(scrollN * 3)) % 9);
-        if (n < 4) {
+    if (dist >= pocketDist - 2 && dist <= pocketDist + 2) {
+      for (let sy = 1; sy <= 4; sy++) {
+        const n = ((nx * 3 + sy * 9 + Math.floor(scrollN * 4)) % 10);
+        if (n < 5) {
           ctx.fillStyle = n < 2 ? C.foam2 : C.spray;
-          ctx.fillRect(x, (crestNY - sy) * PX, PX, PX);
+          ctx.fillRect(x, Math.max(0, crestNY - sy) * PX, PX, PX);
         }
       }
     }
 
-    // ── Wave body from surface to bottom ──────────────────────────────────
     for (let ny = crestNY; ny < NH; ny++) {
       const depth = ny - crestNY;
       let col;
-      if (isWhitewater) {
-        // Settled — sparse flecks, mostly dark ocean
-        const fn = ((nx * 7 + ny * 3 + Math.floor(scrollN * 4)) % 31);
-        col = fn < 2 ? C.foam1 : fn < 5 ? C.ww : C.mid;
-      } else if (atPeak || isLeftFace) {
-        // Breaking shoulder with a brighter, softer lip.
-        if (depth < 3)       col = C.foam1;
-        else if (depth < 7)  col = C.wface;
-        else if (depth < 13) col = C.mid;
-        else                 col = C.deep;
+      if (inWhitewater) {
+        const fn = ((nx * 7 + ny * 3 + Math.floor(scrollN * 5)) % 29);
+        col = fn < 4 ? C.foam1 : fn < 8 ? C.wwf : C.mid;
+      } else if (inPocket) {
+        if (depth < 3) col = C.foam1;
+        else if (depth < 5) col = C.wface;
+        else if (depth < 11) col = C.mid;
+        else col = C.deep;
+      } else if (onShoulder) {
+        if (depth < 2) col = C.foam1;
+        else if (depth < 6) col = C.wface;
+        else if (depth < 12) col = C.mid;
+        else col = C.deep;
       } else {
-        // Clean face / shoulder — surfer's side
-        if (depth < 3)       col = C.wface;
-        else if (depth < 10) col = C.mid;
-        else                 col = C.deep;
+        if (depth < 2) col = C.wface;
+        else if (depth < 8) col = C.mid;
+        else col = C.deep;
       }
       ctx.fillStyle = col;
       ctx.fillRect(x, ny * PX, PX, PX);
@@ -1554,9 +1547,9 @@ function drawScene(canvas, t) {
   }
 
   // ── Surfer ────────────────────────────────────────────────────────────────
-  // Anchor nose (col 0) 2 cols to the right of surferNX in canvas space;
+  // Anchor nose a few cols to the right of surferNX in canvas space;
   // after flip this puts the nose slightly ahead. Board tail extends left on screen.
-  const spriteX   = surferNX * PX - 2 * PX;
+  const spriteX   = surferNX * PX - 4 * PX;
   const spriteY   = surferFaceY * PX - SPRITE_H * PX;
 
   // Gentle sway — no dramatic tilt, just a slow lazy lean
