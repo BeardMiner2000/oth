@@ -17,6 +17,74 @@ const state = {
 const SPOTS = {
   bolinas:      { id: '5842041f4e65fad6a77089c2', name: 'Bolinas', region: 'Marin', lat: 37.9051, lon: -122.6815 }
 };
+const PACIFIC_TZ = 'America/Los_Angeles';
+const PACIFIC_DAY_FORMATTER = new Intl.DateTimeFormat('en-CA', {
+  timeZone: PACIFIC_TZ,
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit'
+});
+const PACIFIC_WEEKDAY_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: PACIFIC_TZ,
+  weekday: 'long'
+});
+const PACIFIC_DATE_LABEL_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: PACIFIC_TZ,
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric'
+});
+const PACIFIC_SHORT_DATE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: PACIFIC_TZ,
+  month: 'short',
+  day: 'numeric'
+});
+const PACIFIC_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: PACIFIC_TZ,
+  hour: 'numeric',
+  minute: '2-digit'
+});
+const PACIFIC_HOUR_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: PACIFIC_TZ,
+  hour: 'numeric',
+  hourCycle: 'h23'
+});
+const PACIFIC_MINUTE_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: PACIFIC_TZ,
+  minute: '2-digit'
+});
+
+function getPacificDateParts(date) {
+  const parts = PACIFIC_DAY_FORMATTER.formatToParts(date);
+  return {
+    year: Number(parts.find(part => part.type === 'year').value),
+    month: Number(parts.find(part => part.type === 'month').value),
+    day: Number(parts.find(part => part.type === 'day').value)
+  };
+}
+
+function shiftPacificDate(dayOffset) {
+  const today = getPacificDateParts(new Date());
+  const target = new Date(Date.UTC(today.year, today.month - 1, today.day, 12, 0, 0));
+  target.setUTCDate(target.getUTCDate() + dayOffset);
+  return target;
+}
+
+function getPacificDayKey(date) {
+  return PACIFIC_DAY_FORMATTER.format(date);
+}
+
+function getPacificDayKeyFromTimestamp(timestamp) {
+  return PACIFIC_DAY_FORMATTER.format(new Date(timestamp * 1000));
+}
+
+function getPacificHour(timestamp) {
+  return Number(PACIFIC_HOUR_FORMATTER.format(new Date(timestamp * 1000)));
+}
+
+function getPacificMinute(timestamp) {
+  return Number(PACIFIC_MINUTE_FORMATTER.format(new Date(timestamp * 1000)));
+}
 
 // ─── Wind direction helpers ───────────────────────────────────────────────────
 const DIR_NAMES = ['N','NNE','NE','ENE','E','ESE','SE','SSE','S','SSW','SW','WSW','W','WNW','NW','NNW'];
@@ -254,15 +322,10 @@ function normalizeSurfForecastForTable(sfData) {
 function getDaySlice(intervals, dayOffset) {
   if (!intervals || intervals.length === 0) return [];
 
-  const now    = new Date();
-  const target = new Date(now);
-  target.setDate(target.getDate() + dayOffset);
-
-  const targetDay = target.toDateString();
+  const targetDay = getPacificDayKey(shiftPacificDate(dayOffset));
 
   return intervals.filter(entry => {
-    const d = new Date(entry.timestamp * 1000);
-    return d.toDateString() === targetDay;
+    return getPacificDayKeyFromTimestamp(entry.timestamp) === targetDay;
   });
 }
 
@@ -275,7 +338,7 @@ function getBestInterval(daySlice) {
   if (!daySlice || daySlice.length === 0) return null;
 
   const daylight = daySlice.filter(e => {
-    const h = new Date(e.timestamp * 1000).getHours();
+    const h = getPacificHour(e.timestamp);
     return h >= 6 && h <= 20;
   });
   const candidates = daylight.length > 0 ? daylight : daySlice;
@@ -529,7 +592,7 @@ function findBestSurfTimeToday(todayIntervals, tides) {
 
   todayIntervals.forEach(entry => {
     if (entry.timestamp < nowTs) return; // skip past slots
-    const h = new Date(entry.timestamp * 1000).getHours();
+    const h = getPacificHour(entry.timestamp);
     if (h < 6 || h > 20) return; // daylight only
 
     // Attach closest tide if not already present
@@ -620,9 +683,7 @@ function renderVerdictPanel(verdict, bestTime) {
   const bestEl = document.getElementById('best-time-indicator');
   if (bestEl) {
     if (bestTime) {
-      const dt = new Date(bestTime.entry.timestamp * 1000);
-      const hr = dt.getHours();
-      const timeLabel = `${hr % 12 || 12}${hr < 12 ? 'AM' : 'PM'}`;
+      const timeLabel = formatHourLabel(bestTime.entry.timestamp);
       const waveMin = bestTime.entry.surf ? bestTime.entry.surf.min : 0;
       const waveMax = bestTime.entry.surf ? bestTime.entry.surf.max : 0;
       const waveStr = waveMin === waveMax ? `${waveMin}FT` : `${waveMin}-${waveMax}FT`;
@@ -668,7 +729,7 @@ function renderFridayFocus(intervals, tides, source) {
   const session = summarizeWindow(dawnWindow.length ? dawnWindow : fridaySlice, tides, source);
   const verdict = calculateVerdict(buildVerdictInput(dawnWindow.length ? dawnWindow : fridaySlice, source));
   const patchCall = buildPatchChannelCall(session);
-  const fridayLabel = friday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+  const fridayLabel = PACIFIC_DATE_LABEL_FORMATTER.format(friday).toUpperCase();
   const tideRange = session.minTide !== null && session.maxTide !== null
     ? `${session.minTide.toFixed(1)}-${session.maxTide.toFixed(1)} FT`
     : 'NO TIDE';
@@ -724,59 +785,77 @@ function renderTideChart(intervals, tides) {
   const padY = 24;
   const minHeight = Math.min(...dayTides.map(t => t.height));
   const maxHeight = Math.max(...dayTides.map(t => t.height));
-  const range = Math.max(1, maxHeight - minHeight);
+  const axisMin = Math.floor(minHeight - 0.5);
+  const axisMax = Math.ceil(maxHeight + 0.5);
+  const range = Math.max(1, axisMax - axisMin);
   const points = dayTides.map((entry, index) => {
     const x = padX + ((width - padX * 2) * index / Math.max(1, dayTides.length - 1));
-    const y = height - padY - (((entry.height - minHeight) / range) * (height - padY * 2));
+    const y = height - padY - (((entry.height - axisMin) / range) * (height - padY * 2));
     return { ...entry, x, y };
   });
   const path = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ');
   const highlights = points.filter(point => point.type === 'HIGH' || point.type === 'LOW');
-  const label = targetDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' }).toUpperCase();
+  const yTicks = [];
+  for (let heightMark = axisMin; heightMark <= axisMax; heightMark += 1) {
+    const y = height - padY - (((heightMark - axisMin) / range) * (height - padY * 2));
+    yTicks.push({ value: heightMark, y });
+  }
+  const hourTicks = points.filter((point, index) => {
+    const hour = getPacificHour(point.timestamp);
+    const minute = getPacificMinute(point.timestamp);
+    if (index === 0 || index === points.length - 1) return true;
+    return minute === 0 && hour % 2 === 0;
+  });
+  const label = PACIFIC_DATE_LABEL_FORMATTER.format(targetDate).toUpperCase();
 
   wrap.innerHTML = `
     <div class="tide-chart-card">
       <div class="tide-chart-title">TIDE CURVE // ${escHtml(label)}</div>
       <div class="tide-chart-meta">SURFLINE PRIMARY, NOAA BACKUP. LOW TIDE PATCH WINDOW, HIGH TIDE CHANNEL WINDOW.</div>
       <svg class="tide-svg" viewBox="0 0 ${width} ${height}" role="img" aria-label="Tide chart for selected day">
-        <line class="tide-grid" x1="${padX}" y1="${padY}" x2="${padX}" y2="${height - padY}" />
-        <line class="tide-grid" x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" />
-        ${points.filter((_, index) => index % 3 === 0).map(point => `<line class="tide-axis" x1="${point.x}" y1="${height - padY}" x2="${point.x}" y2="${height - padY + 6}" />`).join('')}
+        ${yTicks.map(tick => `
+          <line class="tide-grid tide-grid-h" x1="${padX}" y1="${tick.y}" x2="${width - padX}" y2="${tick.y}" />
+          <text class="tide-label tide-height-label" x="${padX - 8}" y="${tick.y + 4}">${escHtml(`${tick.value}FT`)}</text>
+        `).join('')}
+        ${hourTicks.map(point => `
+          <line class="tide-grid tide-grid-v" x1="${point.x}" y1="${padY}" x2="${point.x}" y2="${height - padY}" />
+          <line class="tide-axis" x1="${point.x}" y1="${height - padY}" x2="${point.x}" y2="${height - padY + 6}" />
+        `).join('')}
+        <line class="tide-grid tide-axis-line" x1="${padX}" y1="${padY}" x2="${padX}" y2="${height - padY}" />
+        <line class="tide-grid tide-axis-line" x1="${padX}" y1="${height - padY}" x2="${width - padX}" y2="${height - padY}" />
         <path class="tide-line" d="${path}" />
+        ${points.map(point => `<circle class="tide-dot" cx="${point.x}" cy="${point.y}" r="1.8" />`).join('')}
         ${highlights.map(point => `
           <circle class="tide-point" cx="${point.x}" cy="${point.y}" r="3.5" />
-          <text class="tide-highlight" x="${point.x + 6}" y="${point.y - 8}">${escHtml(`${point.type} ${point.height.toFixed(1)}FT`)}</text>
+          <text class="tide-highlight" x="${point.x + 6}" y="${point.y - 10}">${escHtml(`${point.type} ${point.height.toFixed(1)}FT`)}</text>
+          <text class="tide-highlight tide-highlight-time" x="${point.x + 6}" y="${point.y + 4}">${escHtml(formatTimestamp(point.timestamp))}</text>
         `).join('')}
-        ${points.filter((_, index) => index % 3 === 0).map(point => `<text class="tide-label" x="${point.x - 12}" y="${height - 6}">${escHtml(formatHourShort(point.timestamp))}</text>`).join('')}
-        <text class="tide-label" x="${padX}" y="${padY - 6}">${escHtml(`${maxHeight.toFixed(1)} FT`)}</text>
-        <text class="tide-label" x="${padX}" y="${height - padY + 16}">${escHtml(`${minHeight.toFixed(1)} FT`)}</text>
+        ${hourTicks.map(point => `<text class="tide-label tide-time-label" x="${point.x}" y="${height - 6}">${escHtml(formatHourShort(point.timestamp))}</text>`).join('')}
       </svg>
     </div>
   `;
 }
 
 function getDateForOffset(dayOffset) {
-  const target = new Date();
-  target.setDate(target.getDate() + dayOffset);
-  return target;
+  return shiftPacificDate(dayOffset);
 }
 
 function getUpcomingFridayDate() {
-  const now = new Date();
-  const friday = new Date(now);
-  const diff = (5 - now.getDay() + 7) % 7;
-  friday.setDate(now.getDate() + diff);
+  const today = shiftPacificDate(0);
+  const friday = new Date(today);
+  const diff = (5 - today.getUTCDay() + 7) % 7;
+  friday.setUTCDate(today.getUTCDate() + diff);
   return friday;
 }
 
 function getDaySliceForDate(intervals, date) {
-  const targetDay = date.toDateString();
-  return (intervals || []).filter(entry => new Date(entry.timestamp * 1000).toDateString() === targetDay);
+  const targetDay = getPacificDayKey(date);
+  return (intervals || []).filter(entry => getPacificDayKeyFromTimestamp(entry.timestamp) === targetDay);
 }
 
 function getSessionWindow(daySlice, startHour, endHour) {
   return (daySlice || []).filter(entry => {
-    const hour = new Date(entry.timestamp * 1000).getHours();
+    const hour = getPacificHour(entry.timestamp);
     return hour >= startHour && hour <= endHour;
   });
 }
@@ -893,7 +972,7 @@ function buildFridayCopy(session, verdict) {
 function buildForecastCard(date, offset, session, patchCall) {
   const label = offset === 0
     ? 'TODAY'
-    : date.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+    : PACIFIC_WEEKDAY_FORMATTER.format(date).toUpperCase();
   const verdict = session.verdict;
   return `
     <article class="forecast-card ${verdict.cls}">
@@ -901,7 +980,7 @@ function buildForecastCard(date, offset, session, patchCall) {
         <span>${escHtml(label)}</span>
         <span class="forecast-card-score">${escHtml(`${verdict.score}%`)}</span>
       </div>
-      <div class="forecast-meta">${escHtml(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }).toUpperCase())}</div>
+      <div class="forecast-meta">${escHtml(PACIFIC_SHORT_DATE_FORMATTER.format(date).toUpperCase())}</div>
       <div class="forecast-card-copy">${escHtml(buildCardCopy(session, verdict))}</div>
       <div class="forecast-card-grid">
         <div class="mini">
@@ -954,13 +1033,17 @@ function formatWaveHeightRange(entries) {
 }
 
 function formatHourLabel(timestamp) {
-  const dt = new Date(timestamp * 1000);
-  return `${dt.getHours() % 12 || 12}${dt.getHours() < 12 ? 'AM' : 'PM'}`;
+  const parts = PACIFIC_TIME_FORMATTER.formatToParts(new Date(timestamp * 1000));
+  const hour = parts.find(part => part.type === 'hour').value;
+  const dayPeriod = parts.find(part => part.type === 'dayPeriod').value;
+  return `${hour}${dayPeriod.toUpperCase()}`;
 }
 
 function formatHourShort(timestamp) {
-  const dt = new Date(timestamp * 1000);
-  return `${dt.getHours() % 12 || 12}${dt.getHours() < 12 ? 'A' : 'P'}`;
+  const parts = PACIFIC_TIME_FORMATTER.formatToParts(new Date(timestamp * 1000));
+  const hour = parts.find(part => part.type === 'hour').value;
+  const dayPeriod = parts.find(part => part.type === 'dayPeriod').value;
+  return `${hour}${dayPeriod[0].toUpperCase()}`;
 }
 
 function closestByTimestamp(entries, timestamp) {
@@ -1167,12 +1250,11 @@ function updateDayDisplay() {
   if (!el) return;
 
   const MAX_DAYS = 4;
-  const targetDate = new Date();
-  targetDate.setDate(targetDate.getDate() + state.currentDay);
+  const targetDate = shiftPacificDate(state.currentDay);
 
   el.textContent = state.currentDay === 0
     ? 'TODAY'
-    : targetDate.toLocaleDateString('en-US', { weekday: 'long' }).toUpperCase();
+    : PACIFIC_WEEKDAY_FORMATTER.format(targetDate).toUpperCase();
 
   const prev = document.getElementById('btn-prev');
   const next = document.getElementById('btn-next');
@@ -1353,13 +1435,13 @@ function drawScene(canvas, t) {
 
   // Subtle bob — ±1 row only
   const bob      = Math.round(Math.sin(t * 0.0009) * 1);
-  // A long, crumbly shoulder instead of a steep pitching peak.
-  const peakNY   = Math.floor(NH * 0.38);
-  const faceNY   = Math.floor(NH * 0.57);
-  const wwNY     = Math.floor(NH * 0.65);
+  // A lower, peeling shoulder instead of a mountain peak.
+  const peakNY   = Math.floor(NH * 0.46);
+  const faceNY   = Math.floor(NH * 0.58);
+  const wwNY     = Math.floor(NH * 0.63);
   const flatNY   = NH - 4;
-  const peakDist = -13;
-  const wwBndry  = peakDist - 8;
+  const peakDist = -9;
+  const wwBndry  = peakDist - 10;
   const surferFaceY = faceNY + bob;
 
   // Wave surface height for any canvas column.
@@ -1372,18 +1454,20 @@ function drawScene(canvas, t) {
       const beyond = Math.min(1, (wwBndry - dist) / 18);
       return Math.round(wwNY + (flatNY - wwNY) * beyond);
     } else if (dist < peakDist) {
-      // Left of peak: wave face rising toward peak
+      // Whitewater shoulder rises gently toward the lip.
       const frac = (dist - wwBndry) / (peakDist - wwBndry);
-      return Math.round(wwNY - (wwNY - peakNY) * frac);
-    } else if (dist < 0) {
-      // Right face of peak down to surfer level (surfer on the right slope)
-      const frac = (dist - peakDist) / (-peakDist);
-      return Math.round(peakNY + (faceNY - peakNY) * frac);
-    } else if (dist <= 3) {
-      return faceNY;                         // at surfer
-    } else if (dist <= 34) {
-      // Open shoulder: gentle slope back to flat
-      const frac = (dist - 3) / 31;
+      return Math.round(wwNY - (wwNY - (peakNY + 1)) * frac);
+    } else if (dist < -2) {
+      // Lip stands up briefly before feathering over.
+      const frac = (dist - peakDist) / 7;
+      return Math.round(peakNY + frac);
+    } else if (dist <= 5) {
+      // Surfer glides just under a soft breaking lip.
+      const frac = (dist + 2) / 7;
+      return Math.round((peakNY + 2) + (faceNY - peakNY - 2) * frac);
+    } else if (dist <= 40) {
+      // Long, open shoulder back to flat water.
+      const frac = (dist - 5) / 35;
       return Math.round(faceNY + (flatNY - faceNY) * frac);
     } else {
       return flatNY;
@@ -1416,11 +1500,11 @@ function drawScene(canvas, t) {
     const x        = nx * PX;
 
     // Zone classification based on position relative to peak and surfer
-    const isWhitewater = dist < wwBndry;                           // far left, settled
-    const isLeftFace   = dist >= wwBndry && dist < peakDist;       // wave rising to peak
-    const atPeak       = dist >= peakDist && dist < peakDist + 4;  // peak/breaking zone
-    const isRightFace  = dist >= peakDist + 4 && dist <= 3;        // clean right face (surfer's side)
-    const isShoulder   = dist > 3;                                 // open shoulder ahead
+    const isWhitewater = dist < wwBndry;
+    const isLeftFace   = dist >= wwBndry && dist < peakDist;
+    const atPeak       = dist >= peakDist && dist < 0;
+    const isRightFace  = dist >= 0 && dist <= 5;
+    const isShoulder   = dist > 5;
 
     // ── Lip foam at the peak (behind surfer, wave breaking there) ────────
     if (atPeak) {
@@ -1428,10 +1512,13 @@ function drawScene(canvas, t) {
       ctx.fillRect(x, crestNY * PX, PX, PX);
       ctx.fillStyle = C.foam1;
       ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
+      if (dist > peakDist + 2) {
+        ctx.fillRect(x, (crestNY + 2) * PX, PX, PX);
+      }
     }
 
     // ── Spray above the peak ──────────────────────────────────────────────
-    if (atPeak && dist >= peakDist && dist < peakDist + 2) {
+    if (atPeak && dist >= peakDist && dist < peakDist + 3) {
       for (let sy = 1; sy <= 3; sy++) {
         const n = ((nx * 5 + sy * 11 + Math.floor(scrollN * 3)) % 9);
         if (n < 4) {
@@ -1450,13 +1537,13 @@ function drawScene(canvas, t) {
         const fn = ((nx * 7 + ny * 3 + Math.floor(scrollN * 4)) % 31);
         col = fn < 2 ? C.foam1 : fn < 5 ? C.ww : C.mid;
       } else if (atPeak || isLeftFace) {
-        // Breaking / steep left face
-        if (depth < 2)       col = C.foam1;
-        else if (depth < 8)  col = C.wface;
-        else if (depth < 14) col = C.mid;
+        // Breaking shoulder with a brighter, softer lip.
+        if (depth < 3)       col = C.foam1;
+        else if (depth < 7)  col = C.wface;
+        else if (depth < 13) col = C.mid;
         else                 col = C.deep;
       } else {
-        // Clean right face / shoulder — surfer's side
+        // Clean face / shoulder — surfer's side
         if (depth < 3)       col = C.wface;
         else if (depth < 10) col = C.mid;
         else                 col = C.deep;
@@ -1522,11 +1609,7 @@ function formatWind(speed, dir) {
 
 function formatTimestamp(unix) {
   if (!unix) return '--:--';
-  return new Date(unix * 1000).toLocaleTimeString('en-US', {
-    hour:   '2-digit',
-    minute: '2-digit',
-    hour12: false
-  });
+  return PACIFIC_TIME_FORMATTER.format(new Date(unix * 1000)).toUpperCase();
 }
 
 // ─── HTML Escaping ────────────────────────────────────────────────────────────

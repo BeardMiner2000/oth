@@ -543,11 +543,28 @@ header {
   stroke-width: 1;
 }
 
+.tide-grid-h {
+  stroke: rgba(91,155,213,0.18);
+}
+
+.tide-grid-v {
+  stroke: rgba(91,155,213,0.09);
+  stroke-dasharray: 2 4;
+}
+
+.tide-axis-line {
+  stroke: rgba(91,155,213,0.24);
+}
+
 .tide-line {
   fill: none;
   stroke: var(--stoke);
   stroke-width: 3;
   filter: drop-shadow(0 0 4px rgba(245,197,24,0.25));
+}
+
+.tide-dot {
+  fill: rgba(238, 248, 255, 0.55);
 }
 
 .tide-point {
@@ -561,10 +578,22 @@ header {
   letter-spacing: 0.03em;
 }
 
+.tide-height-label {
+  text-anchor: end;
+}
+
+.tide-time-label {
+  text-anchor: middle;
+}
+
 .tide-highlight {
   fill: var(--text);
   font-family: 'VT323', monospace;
   font-size: 12px;
+}
+
+.tide-highlight-time {
+  fill: var(--mid);
 }
 
 /* ─── Terminal Messages ──────────────────────────────────────────────────────── */
