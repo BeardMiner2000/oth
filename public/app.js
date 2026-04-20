@@ -100,6 +100,10 @@ function isBolinasSpot(spotKey = state.currentSpot) {
   return spotKey === 'bolinas';
 }
 
+function isSurflineSource(source) {
+  return source === 'surfline' || source === 'surfline_relay';
+}
+
 function buildSurfRange(heightFt, minFactor, maxFactor) {
   if (!heightFt) {
     return { min: 0, max: 0 };
@@ -648,8 +652,8 @@ function renderVerdictPanel(verdict, bestTime) {
   const waveSource = state.forecastData?.sources?.waves || verdict.source || 'none';
 
   // Update class
-  box.className = waveSource === 'surfline' ? verdict.cls : 'chunky';
-  textEl.textContent = waveSource === 'surfline' ? verdict.verdict : '[ BACKUP ]';
+  box.className = isSurflineSource(waveSource) ? verdict.cls : 'chunky';
+  textEl.textContent = isSurflineSource(waveSource) ? verdict.verdict : '[ BACKUP ]';
 
   // Label — condition descriptor + JL verdict question
   const labels = {
@@ -661,23 +665,23 @@ function renderVerdictPanel(verdict, bestTime) {
     swim:     'JL WOULD GO? // COFFEE WALK, NOT A SURF'
   };
   if (labelEl) {
-    labelEl.textContent = waveSource === 'surfline'
+    labelEl.textContent = isSurflineSource(waveSource)
       ? (labels[verdict.cls] || 'JL WOULD GO?')
       : 'JL WOULD GO? // BACKUP READ, NOT SURFLINE';
   }
 
   // Stoke meter
   if (stokeEl) {
-    stokeEl.textContent = waveSource === 'surfline'
+    stokeEl.textContent = isSurflineSource(waveSource)
       ? buildStokeMeter(verdict.score)
       : '[ BACKUP SOURCE - WAITING ON SURFLINE ]';
   }
 
   // Reasons + data source tag
   if (reasonEl) {
-    const srcMap = { surfline: 'SURFLINE', stormglass: 'STORMGLASS BACKUP' };
+    const srcMap = { surfline: 'SURFLINE', surfline_relay: 'SURFLINE RELAY', stormglass: 'STORMGLASS BACKUP' };
     const srcTag = verdict.source ? `<span class="reason-item reason-neutral">[ SRC: ${srcMap[verdict.source] || verdict.source} ]</span>` : '';
-    const backupTag = waveSource !== 'surfline'
+    const backupTag = !isSurflineSource(waveSource)
       ? `<span class="reason-item reason-bad">[ SURFLINE FETCH FAILED ON SERVER - BACKUP ONLY ]</span>`
       : '';
     reasonEl.innerHTML = (verdict.reasons
@@ -747,21 +751,21 @@ function renderFridayFocus(intervals, tides, source, sourceMeta = {}) {
     ? `${session.minTide.toFixed(1)}-${session.maxTide.toFixed(1)} FT`
     : 'NO TIDE';
   const fridayKicker = isCurrentFriday ? 'THIS FRIDAY' : 'NEXT FRIDAY';
-  const waveSourceLabel = sourceMeta.waveSource === 'surfline' ? 'SURFLINE' : 'STORMGLASS BACKUP';
-  const tideSourceLabel = sourceMeta.tideSource === 'surfline' ? 'SURFLINE' : sourceMeta.tideSource === 'noaa' ? 'NOAA BACKUP' : 'UNKNOWN';
-  const sourceWarning = sourceMeta.waveSource !== 'surfline'
+  const waveSourceLabel = isSurflineSource(sourceMeta.waveSource) ? (sourceMeta.waveSource === 'surfline_relay' ? 'SURFLINE RELAY' : 'SURFLINE') : 'STORMGLASS BACKUP';
+  const tideSourceLabel = isSurflineSource(sourceMeta.tideSource) ? (sourceMeta.tideSource === 'surfline_relay' ? 'SURFLINE RELAY' : 'SURFLINE') : sourceMeta.tideSource === 'noaa' ? 'NOAA BACKUP' : 'UNKNOWN';
+  const sourceWarning = !isSurflineSource(sourceMeta.waveSource)
     ? 'SURFLINE IS FAILING ON THE SERVER RIGHT NOW. THIS FRIDAY CARD IS A BACKUP READ, NOT JL TRUTH.'
-    : sourceMeta.tideSource !== 'surfline'
+    : !isSurflineSource(sourceMeta.tideSource)
       ? 'TIDE CURVE IS CURRENTLY ON NOAA BACKUP BECAUSE SURFLINE TIDE FETCH FAILED.'
       : '';
-  const focusHeadline = sourceMeta.waveSource === 'surfline'
+  const focusHeadline = isSurflineSource(sourceMeta.waveSource)
     ? buildFridayHeadline(verdict, session)
     : 'SURFLINE BLOCKED // BACKUP READ ONLY';
-  const focusCopy = sourceMeta.waveSource === 'surfline'
+  const focusCopy = isSurflineSource(sourceMeta.waveSource)
     ? buildFridayCopy(session, verdict)
     : `Backup read is showing ${session.waveLabel.toLowerCase()}. Wait for Surfline before treating this like JL gospel.`;
-  const stokeDisplay = sourceMeta.waveSource === 'surfline' ? `${verdict.score}%` : 'BACKUP ONLY';
-  const focusClass = sourceMeta.waveSource === 'surfline' ? verdict.cls : 'chunky';
+  const stokeDisplay = isSurflineSource(sourceMeta.waveSource) ? `${verdict.score}%` : 'BACKUP ONLY';
+  const focusClass = isSurflineSource(sourceMeta.waveSource) ? verdict.cls : 'chunky';
 
   wrap.innerHTML = `
     <div class="focus-card">
@@ -839,8 +843,8 @@ function renderTideChart(intervals, tides, sourceMeta = {}) {
     return minute === 0 && hour % 2 === 0;
   });
   const label = PACIFIC_DATE_LABEL_FORMATTER.format(targetDate).toUpperCase();
-  const tideSourceLabel = sourceMeta.tideSource === 'surfline' ? 'SURFLINE' : sourceMeta.tideSource === 'noaa' ? 'NOAA BACKUP' : 'UNKNOWN';
-  const tideMeta = sourceMeta.tideSource === 'surfline'
+  const tideSourceLabel = isSurflineSource(sourceMeta.tideSource) ? (sourceMeta.tideSource === 'surfline_relay' ? 'SURFLINE RELAY' : 'SURFLINE') : sourceMeta.tideSource === 'noaa' ? 'NOAA BACKUP' : 'UNKNOWN';
+  const tideMeta = isSurflineSource(sourceMeta.tideSource)
     ? 'SURFLINE TIDE CURVE. LOW TIDE PATCH WINDOW, HIGH TIDE CHANNEL WINDOW.'
     : 'NOAA BACKUP TIDE CURVE. SURFLINE TIDE FETCH FAILED ON SERVER.';
 

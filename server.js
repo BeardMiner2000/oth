@@ -5,6 +5,7 @@ require('dotenv').config();
 const express  = require('express');
 const cors     = require('cors');
 const path     = require('path');
+const fs       = require('fs');
 const NodeCache = require('node-cache');
 
 const surfline    = require('./scrapers/surfline');
@@ -29,6 +30,8 @@ const allowedOrigins = new Set(
 const NOAA_TIDE_STATIONS = {
   bolinas: '9414958'
 };
+const SNAPSHOT_PATH = path.join(__dirname, 'data', 'surfline-snapshots.json');
+const SURFLINE_SNAPSHOT_TTL_SEC = Number(process.env.SURFLINE_SNAPSHOT_TTL_SEC || 4 * 60 * 60);
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 const forecastCache = new NodeCache({ stdTTL: 30 * 60, checkperiod: 5 * 60 });
@@ -85,6 +88,62 @@ function closestTide(tides, timestamp) {
   });
 }
 
+function ensureSnapshotDir() {
+  fs.mkdirSync(path.dirname(SNAPSHOT_PATH), { recursive: true });
+}
+
+function loadSnapshotStore() {
+  try {
+    ensureSnapshotDir();
+    if (!fs.existsSync(SNAPSHOT_PATH)) return {};
+    return JSON.parse(fs.readFileSync(SNAPSHOT_PATH, 'utf8'));
+  } catch (err) {
+    console.error('[SNAPSHOT] Failed to load snapshot store:', err.message);
+    return {};
+  }
+}
+
+function saveSnapshotStore(store) {
+  ensureSnapshotDir();
+  fs.writeFileSync(SNAPSHOT_PATH, JSON.stringify(store, null, 2));
+}
+
+function getStoredSurflineSnapshot(spotKey) {
+  const store = loadSnapshotStore();
+  return store[spotKey] || null;
+}
+
+function setStoredSurflineSnapshot(spotKey, snapshot) {
+  const store = loadSnapshotStore();
+  store[spotKey] = snapshot;
+  saveSnapshotStore(store);
+}
+
+function isFreshSnapshot(snapshot) {
+  if (!snapshot || !snapshot.fetchedAt) return false;
+  const ageSec = (Date.now() - new Date(snapshot.fetchedAt).getTime()) / 1000;
+  return ageSec >= 0 && ageSec <= SURFLINE_SNAPSHOT_TTL_SEC;
+}
+
+function requireSnapshotAuth(req, res, next) {
+  const token = process.env.SURFLINE_SNAPSHOT_TOKEN;
+  if (!token) {
+    return res.status(503).json({ error: 'SURFLINE_SNAPSHOT_TOKEN not configured' });
+  }
+
+  const auth = req.headers.authorization || '';
+  const bearer = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (bearer !== token) {
+    return res.status(401).json({ error: 'Unauthorized snapshot write' });
+  }
+  next();
+}
+
+function isSnapshotBodyValid(body) {
+  if (!body || typeof body !== 'object') return false;
+  return ['wave', 'wind', 'tides', 'conditions'].every(key => Array.isArray(body[key]));
+}
+
 // ─── Routes ───────────────────────────────────────────────────────────────────
 
 /** GET /api/spots – return all known spots */
@@ -136,19 +195,37 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
         : Promise.resolve([])
     ]);
 
-    const waves      = waveResult.status  === 'fulfilled' ? waveResult.value      : [];
-    const winds      = windResult.status  === 'fulfilled' ? windResult.value      : [];
-    const sfTides    = tideResult.status  === 'fulfilled' ? tideResult.value      : [];
+    const liveWaves  = waveResult.status  === 'fulfilled' ? waveResult.value      : [];
+    const liveWinds  = windResult.status  === 'fulfilled' ? windResult.value      : [];
+    const liveSfTides = tideResult.status === 'fulfilled' ? tideResult.value      : [];
     const noaaTides  = noaaTideResult.status === 'fulfilled' ? noaaTideResult.value : [];
-    const tides      = sfTides.length > 0 ? sfTides : noaaTides;   // prefer Surfline tides
-    const conds      = condResult.status  === 'fulfilled' ? condResult.value      : [];
+    const liveConds  = condResult.status  === 'fulfilled' ? condResult.value      : [];
     const stormglassData = stormglassResult.status === 'fulfilled' ? stormglassResult.value : [];
+    const snapshot = getStoredSurflineSnapshot(spotKey);
+    const freshSnapshot = isFreshSnapshot(snapshot) ? snapshot : null;
+
+    const waves = liveWaves.length > 0 ? liveWaves : (freshSnapshot?.wave || []);
+    const winds = liveWinds.length > 0 ? liveWinds : (freshSnapshot?.wind || []);
+    const sfTides = liveSfTides.length > 0 ? liveSfTides : (freshSnapshot?.tides || []);
+    const conds = liveConds.length > 0 ? liveConds : (freshSnapshot?.conditions || []);
+    const tides = sfTides.length > 0 ? sfTides : noaaTides;   // prefer Surfline tides
 
     // Merge wave + wind by timestamp
     const merged = mergeWaveWind(waves, winds).map(entry => ({
       ...entry,
       tide: closestTide(tides, entry.timestamp)
     }));
+
+    const waveSource = liveWaves.length > 0
+      ? 'surfline'
+      : freshSnapshot && waves.length > 0
+        ? 'surfline_relay'
+        : (stormglassData.length > 0 ? 'stormglass' : 'none');
+    const tideSource = liveSfTides.length > 0
+      ? 'surfline'
+      : freshSnapshot && sfTides.length > 0
+        ? 'surfline_relay'
+        : (noaaTides.length > 0 ? 'noaa' : 'none');
 
     const payload = {
       spot:           spotMeta,
@@ -157,9 +234,13 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       conditions:     conds,
       stormglass:     stormglassData,
       sources: {
-        waves: merged.length > 0 ? 'surfline' : (stormglassData.length > 0 ? 'stormglass' : 'none'),
-        tides: sfTides.length > 0 ? 'surfline' : (noaaTides.length > 0 ? 'noaa' : 'none')
+        waves: waveSource,
+        tides: tideSource
       },
+      snapshotMeta: freshSnapshot ? {
+        fetchedAt: freshSnapshot.fetchedAt,
+        receivedAt: freshSnapshot.receivedAt || null
+      } : null,
       fetchedAt:      new Date().toISOString(),
       cached:         false,
       errors: {
@@ -171,12 +252,48 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       }
     };
 
-    const ttl = merged.length > 0 ? 30 * 60 : 5 * 60;
+    const ttl = waveSource === 'surfline' || waveSource === 'surfline_relay' ? 30 * 60 : 5 * 60;
     forecastCache.set(cacheKey, payload, ttl);
     res.json(payload);
   } catch (err) {
     next(err);
   }
+});
+
+app.post('/api/internal/surfline-snapshot/:spotId', requireSnapshotAuth, (req, res) => {
+  const spotKey = req.params.spotId;
+  const spotMeta = surfline.SPOTS[spotKey];
+  if (!spotMeta) {
+    return res.status(404).json({ error: `Unknown spot: ${spotKey}` });
+  }
+  if (!isSnapshotBodyValid(req.body)) {
+    return res.status(400).json({ error: 'Invalid snapshot payload' });
+  }
+
+  const snapshot = {
+    wave: req.body.wave,
+    wind: req.body.wind,
+    tides: req.body.tides,
+    conditions: req.body.conditions,
+    fetchedAt: req.body.fetchedAt || new Date().toISOString(),
+    receivedAt: new Date().toISOString()
+  };
+
+  setStoredSurflineSnapshot(spotKey, snapshot);
+  forecastCache.del(`forecast_${spotKey}`);
+
+  return res.json({
+    ok: true,
+    spotKey,
+    counts: {
+      wave: snapshot.wave.length,
+      wind: snapshot.wind.length,
+      tides: snapshot.tides.length,
+      conditions: snapshot.conditions.length
+    },
+    fetchedAt: snapshot.fetchedAt,
+    receivedAt: snapshot.receivedAt
+  });
 });
 
 /** GET /api/buoy/:buoyId – real-time buoy data */
