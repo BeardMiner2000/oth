@@ -1358,7 +1358,7 @@ function updateTimestamp() {
 // ─── Pixel Hero Animation ────────────────────────────────────────────────────
 const HERO = {
   PX: 4,
-  FPS: 2
+  FPS: 1
 };
 
 const C = {
@@ -1386,69 +1386,70 @@ const C = {
   outline: '#08111b'
 };
 
-const SURFER_W = 18;
+const SURFER_W = 16;
 const SURFER_H = 19;
 
 const SURFER_BASE_RECTS = {
   bald: [
-    { x: 7, y: 0, w: 4, h: 2 },
-    { x: 6, y: 1, w: 1, h: 2 },
-    { x: 11, y: 1, w: 1, h: 1 }
+    { x: 5, y: 0, w: 5, h: 2 },
+    { x: 4, y: 1, w: 1, h: 2 },
+    { x: 10, y: 1, w: 1, h: 2 }
   ],
   skin: [
-    { x: 7, y: 2, w: 4, h: 3 },
-    { x: 11, y: 3, w: 1, h: 1 },
-    { x: 4, y: 12, w: 1, h: 2 },
-    { x: 13, y: 12, w: 1, h: 1 }
+    { x: 5, y: 2, w: 5, h: 3 },
+    { x: 4, y: 3, w: 1, h: 1 },
+    { x: 10, y: 3, w: 1, h: 1 },
+    { x: 2, y: 12, w: 1, h: 2 },
+    { x: 13, y: 12, w: 1, h: 2 }
   ],
   beard: [
-    { x: 9, y: 4, w: 4, h: 1 },
-    { x: 8, y: 5, w: 6, h: 2 },
-    { x: 8, y: 7, w: 4, h: 1 },
-    { x: 9, y: 8, w: 2, h: 1 }
+    { x: 4, y: 4, w: 7, h: 1 },
+    { x: 3, y: 5, w: 9, h: 2 },
+    { x: 4, y: 7, w: 7, h: 1 },
+    { x: 5, y: 8, w: 5, h: 1 }
   ],
   beardShade: [
-    { x: 9, y: 5, w: 1, h: 2 },
-    { x: 11, y: 6, w: 1, h: 1 },
-    { x: 9, y: 7, w: 1, h: 1 }
+    { x: 4, y: 6, w: 2, h: 1 },
+    { x: 9, y: 6, w: 2, h: 1 },
+    { x: 6, y: 7, w: 2, h: 1 }
   ],
   suit: [
-    { x: 6, y: 5, w: 3, h: 2 },
-    { x: 5, y: 7, w: 4, h: 3 },
-    { x: 6, y: 10, w: 4, h: 3 },
-    { x: 7, y: 13, w: 2, h: 4 },
-    { x: 11, y: 12, w: 2, h: 5 }
+    { x: 5, y: 8, w: 5, h: 5 },
+    { x: 3, y: 8, w: 2, h: 4 },
+    { x: 10, y: 8, w: 2, h: 4 },
+    { x: 5, y: 13, w: 2, h: 5 },
+    { x: 8, y: 13, w: 2, h: 5 }
   ],
   suitShade: [
-    { x: 8, y: 5, w: 1, h: 8 },
-    { x: 8, y: 13, w: 1, h: 4 },
-    { x: 12, y: 12, w: 1, h: 5 }
+    { x: 8, y: 8, w: 2, h: 5 },
+    { x: 6, y: 13, w: 1, h: 5 },
+    { x: 9, y: 13, w: 1, h: 5 }
   ],
   toes: [
-    { x: 7, y: 17, w: 2, h: 1 },
-    { x: 13, y: 17, w: 3, h: 1 }
+    { x: 5, y: 18, w: 2, h: 1 },
+    { x: 8, y: 18, w: 3, h: 1 }
   ]
 };
 
 const SURFER_ARM_FRAMES = [
   {
     suit: [
-      { x: 4, y: 8, w: 1, h: 4 },
-      { x: 10, y: 8, w: 1, h: 3 }
+      { x: 2, y: 8, w: 1, h: 4 },
+      { x: 12, y: 9, w: 1, h: 3 }
     ],
     skin: [
-      { x: 4, y: 12, w: 1, h: 1 },
-      { x: 10, y: 11, w: 1, h: 1 }
+      { x: 2, y: 12, w: 1, h: 1 },
+      { x: 12, y: 12, w: 1, h: 1 }
     ]
   },
   {
     suit: [
-      { x: 4, y: 9, w: 1, h: 3 },
-      { x: 10, y: 7, w: 1, h: 4 }
+      { x: 2, y: 9, w: 1, h: 3 },
+      { x: 12, y: 8, w: 1, h: 4 }
     ],
     skin: [
-      { x: 4, y: 12, w: 1, h: 1 },
-      { x: 10, y: 10, w: 1, h: 1 }
+      { x: 2, y: 12, w: 1, h: 1 },
+      { x: 12, y: 12, w: 1, h: 1 }
     ]
   }
 ];
@@ -1562,7 +1563,7 @@ function drawScene(canvas, t) {
   const PX = HERO.PX;
   const horizonY = Math.floor(H * 0.46);
   const frame = Math.floor(t / (1000 / HERO.FPS)) % SURFER_ARM_FRAMES.length;
-  const drift = Math.sin(t * 0.00035) * PX * 2;
+  const drift = Math.sin(t * 0.00025) * PX * 0.6;
 
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
@@ -1622,13 +1623,14 @@ function drawScene(canvas, t) {
     }
   }
 
-  const boardStartRatio = 0.29 + drift / W;
-  const boardMidRatio = 0.39 + drift / W;
-  const boardEndRatio = 0.445 + drift / W;
+  const boardStartRatio = 0.31 + drift / W;
+  const boardMidRatio = 0.38 + drift / W;
+  const boardEndRatio = 0.45 + drift / W;
+  const boardY = quantize(sampleWaveY(0.365 + drift / W, H) - PX * 2);
   const boardPoints = [
-    { x: boardStartRatio * W, y: sampleWaveY(boardStartRatio, H) - PX * 2 },
-    { x: boardMidRatio * W, y: sampleWaveY(boardMidRatio, H) - PX },
-    { x: boardEndRatio * W, y: sampleWaveY(boardEndRatio, H) - PX }
+    { x: boardStartRatio * W, y: boardY },
+    { x: boardMidRatio * W, y: boardY },
+    { x: boardEndRatio * W, y: boardY }
   ].map(point => ({
     x: quantize(point.x),
     y: quantize(point.y)
@@ -1641,22 +1643,12 @@ function drawScene(canvas, t) {
     { x: boardPoints[2].x - PX, y: boardPoints[2].y }
   ], C.wax, 1);
 
-  const surferRatio = 0.432 + drift / W;
-  const surferBaseX = quantize(surferRatio * W - SURFER_W * PX / 2);
-  const surferBaseY = quantize(sampleWaveY(surferRatio, H) - SURFER_H * PX - PX * 2 + Math.sin(t * 0.0016) * PX);
-  const soulArchTilt = -0.08 + Math.sin(t * 0.0012) * 0.015;
-  const pivotX = surferBaseX + SURFER_W * PX * 0.45;
-  const pivotY = surferBaseY + SURFER_H * PX * 0.9;
-
-  ctx.save();
-  ctx.translate(pivotX, pivotY);
-  ctx.rotate(soulArchTilt);
-  ctx.translate(-pivotX, -pivotY);
+  const surferBaseX = quantize(boardPoints[2].x - 10 * PX);
+  const surferBaseY = quantize(boardY - (SURFER_H - 1) * PX + Math.sin(t * 0.0012) * PX * 0.35);
   drawSurfer(ctx, surferBaseX, surferBaseY, frame);
-  ctx.restore();
 
-  const noseSparkle = quantize((0.458 + drift / W) * W);
-  const noseSparkleY = quantize(sampleWaveY(0.47 + drift / W, H) - PX * 4);
+  const noseSparkle = quantize(boardPoints[2].x + PX);
+  const noseSparkleY = quantize(boardY - PX * 3);
   ctx.fillStyle = C.foamBright;
   ctx.fillRect(noseSparkle, noseSparkleY, PX, PX);
   ctx.fillRect(noseSparkle + PX * 2, noseSparkleY + PX, PX, PX);
