@@ -149,7 +149,7 @@ header {
 #surf-animation {
   width: 100%;
   overflow: hidden;
-  height: 260px;
+  height: 280px;
   border: 1px solid var(--wave-dim);
   border-radius: 2px;
   margin: 0.75rem 0;
@@ -727,7 +727,7 @@ footer {
   .terminal-container { padding: 0.5rem 0.75rem 1.5rem; }
   #ascii-logo         { font-size: 0.28rem; }
   #system-status      { font-size: 0.85rem; }
-  #surf-animation     { height: 180px; }
+  #surf-animation     { height: 200px; }
   #verdict-text       { font-size: 1rem; }
   #controls           { padding: 0.7rem 0.5rem; }
   #friday-focus-wrap  { grid-template-columns: 1fr; }
@@ -749,5 +749,5 @@ footer {
     padding: 0.5rem 0;
   }
 
-  #surf-animation { height: 190px; }
+  #surf-animation { height: 200px; }
 }

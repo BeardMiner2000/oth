@@ -1355,277 +1355,314 @@ function updateTimestamp() {
   });
 }
 
-// ─── NES Canvas Animation ─────────────────────────────────────────────────────
-//
-// Pixel-art longboarder cruising on a slow shoulder.
-// Slightly finer than the original pass, still retro and intentionally chunky.
-
-const NES = {
-  PX:  5,    // logical pixel → screen pixel scale
-  FPS: 1.5,  // sprite animation FPS (slow, lazy longboard feel)
+// ─── Pixel Hero Animation ────────────────────────────────────────────────────
+const HERO = {
+  PX: 4,
+  FPS: 2
 };
 
-// ── NES-style palette — beach blues + surfer colors ──────────────────────────
 const C = {
-  // Sky & distant water
-  sky1:   '#a8d4ee',  // pale sky upper
-  sky2:   '#c8e6f8',  // lighter sky near horizon
-  horiz:  '#5a9ec8',  // horizon line
-  far:    '#2e78b0',  // far ocean
-  mid:    '#1e5a90',  // mid-distance water
-  // Wave face
-  wface:  '#1a6e60',  // transparent green-blue (classic clean face)
-  deep:   '#0e2e50',  // deep trough
-  // Foam & whitewater
-  foam2:  '#eef8ff',  // bright white foam
-  foam1:  '#b8daf2',  // light foam
-  spray:  '#ddeeff',  // fine mist/spray
-  ww:     '#4e80b0',  // whitewater base
-  wwf:    '#88b8d8',  // whitewater foam
-  // Surfer — bald guy with big gray beard
-  bald:   '#c87848',  // sun-burned bald pate (darker, more distinct)
-  skin:   '#e8b068',  // warm golden skin
-  beard:  '#d9d9d4',  // gray beard — light so it reads clearly
-  beardD: '#8c8c88',  // beard shadow
-  outline:'#08111b',  // sprite outline so the surfer pops
-  suit:   '#1e4880',  // wetsuit blue
-  suitD:  '#142e58',  // dark wetsuit shadow
-  board:  '#e8cc3a',  // yellow longboard
-  boardD: '#b89820',  // board rail/shadow
-  wax:    '#f0ead8',  // deck wax / feet
+  bg: '#0a1f36',
+  skyTop: '#7dc6ff',
+  skyBright: '#62b4f0',
+  skyMid: '#3f8fd0',
+  horizon: '#3f86be',
+  seaBack: '#225f98',
+  faceTop: '#174f76',
+  faceMid: '#103f67',
+  faceDeep: '#0a2b4b',
+  foamBright: '#eef8ff',
+  foamSoft: '#b8daf2',
+  spray: '#d8f1ff',
+  bald: '#d2874f',
+  skin: '#e7b17a',
+  beard: '#dad8d2',
+  beardShade: '#96948f',
+  suit: '#1b2430',
+  suitShade: '#0f1720',
+  board: '#c89a12',
+  boardShade: '#8c6500',
+  wax: '#f7f0db',
+  outline: '#08111b'
 };
 
-// ── Surfer sprite: 2 frames, 20×18 logical pixels ────────────────────────────
-// Left-facing in canvas space → right-facing after horizontal mirror.
-// Big bald dome, huge gray beard, lazy noserider stance on a long yellow board.
-const FRAMES = [
-  [
-    [null,null,null,'bald','bald','bald','bald','bald',null,null,null,null,null,null,null,null,null,null,null,null],
-    [null,null,'bald','bald','bald','bald','bald','bald','bald',null,null,null,null,null,null,null,null,null,null,null],
-    [null,null,'bald','bald','bald','skin','skin','skin','bald',null,null,null,null,null,null,null,null,null,null,null],
-    [null,'skin','skin','skin','skin','skin','skin','skin','skin',null,null,null,null,null,null,null,null,null,null,null],
-    [null,'beardD','beard','beard','skin','skin','skin','skin','suit',null,null,null,null,null,null,null,null,null,null,null],
-    ['beard','beard','beard','beard','beard','beard','beard','suit','suit','skin',null,null,null,null,null,null,null,null,null,null],
-    ['beard','beard','beard','beard','beard','beard','beard','beard','suit','suit','skin',null,null,null,null,null,null,null,null,null],
-    [null,'beard','beard','beard','beard','beard','beard','beard','suit','suit',null,null,null,null,null,null,null,null,null,null],
-    [null,null,'beard','beard','beard','beard','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null],
-    ['skin',null,'suit','suit','suit','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null],
-    [null,null,'suit','suit','suit','suit','suit','suit','suit','skin',null,null,null,null,null,null,null,null,null,null],
-    [null,'skin','suit','suit','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null,null],
-    [null,null,'suitD','suit','suit','suitD','suit','suit',null,null,null,null,null,null,null,null,null,null,null,null],
-    [null,'suitD','suit',null,'suit','suit',null,'suit','suitD',null,null,null,null,null,null,null,null,null,null,null],
-    ['wax','wax',null,null,'wax','wax',null,null,null,null,null,null,null,null,null,null,null,null,null,null],
-    ['board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','boardD'],
-    [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD',null],
-    [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+const SURFER_W = 16;
+const SURFER_H = 19;
+
+const SURFER_BASE_RECTS = {
+  bald: [
+    { x: 5, y: 0, w: 5, h: 2 },
+    { x: 4, y: 1, w: 1, h: 2 },
+    { x: 10, y: 1, w: 1, h: 2 }
   ],
-  [
-    [null,null,null,'bald','bald','bald','bald','bald',null,null,null,null,null,null,null,null,null,null,null,null],
-    [null,null,'bald','bald','bald','bald','bald','bald','bald',null,null,null,null,null,null,null,null,null,null,null],
-    [null,null,'bald','bald','bald','skin','skin','skin','bald',null,null,null,null,null,null,null,null,null,null,null],
-    [null,'skin','skin','skin','skin','skin','skin','skin','skin',null,null,null,null,null,null,null,null,null,null,null],
-    [null,'beardD','beard','beard','skin','skin','skin','skin','suit',null,null,null,null,null,null,null,null,null,null,null],
-    ['beard','beard','beard','beard','beard','beard','beard','suit','suit',null,'skin',null,null,null,null,null,null,null,null,null],
-    ['beard','beard','beard','beard','beard','beard','beard','beard','suit','suit',null,'skin',null,null,null,null,null,null,null,null],
-    [null,'beard','beard','beard','beard','beard','beard','beard','suit','suit',null,null,null,null,null,null,null,null,null,null],
-    [null,null,'beard','beard','beard','beard','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null],
-    [null,'skin','suit','suit','suit','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null],
-    [null,null,'suit','suit','suit','suit','suit','suit','suit','skin',null,null,null,null,null,null,null,null,null,null],
-    [null,null,'skin','suit','suit','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null,null],
-    [null,'suitD','suit','suit','suitD','suit','suit','suit',null,null,null,null,null,null,null,null,null,null,null,null],
-    [null,'suitD','suit',null,'suit','suit',null,'suit','suitD',null,null,null,null,null,null,null,null,null,null,null],
-    ['wax','wax',null,null,'wax','wax',null,null,null,null,null,null,null,null,null,null,null,null,null,null],
-    ['board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','board','boardD'],
-    [null,'boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD','boardD',null],
-    [null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null,null]
+  skin: [
+    { x: 5, y: 2, w: 5, h: 3 },
+    { x: 4, y: 3, w: 1, h: 1 },
+    { x: 10, y: 3, w: 1, h: 1 },
+    { x: 2, y: 12, w: 1, h: 2 },
+    { x: 13, y: 12, w: 1, h: 2 }
   ],
+  beard: [
+    { x: 4, y: 4, w: 7, h: 1 },
+    { x: 3, y: 5, w: 9, h: 2 },
+    { x: 4, y: 7, w: 7, h: 1 },
+    { x: 5, y: 8, w: 5, h: 1 }
+  ],
+  beardShade: [
+    { x: 4, y: 6, w: 2, h: 1 },
+    { x: 9, y: 6, w: 2, h: 1 },
+    { x: 6, y: 7, w: 2, h: 1 }
+  ],
+  suit: [
+    { x: 5, y: 8, w: 5, h: 5 },
+    { x: 3, y: 8, w: 2, h: 4 },
+    { x: 10, y: 8, w: 2, h: 4 },
+    { x: 5, y: 13, w: 2, h: 5 },
+    { x: 8, y: 13, w: 2, h: 5 }
+  ],
+  suitShade: [
+    { x: 8, y: 8, w: 2, h: 5 },
+    { x: 6, y: 13, w: 1, h: 5 },
+    { x: 9, y: 13, w: 1, h: 5 }
+  ],
+  toes: [
+    { x: 5, y: 18, w: 2, h: 1 },
+    { x: 8, y: 18, w: 2, h: 1 }
+  ]
+};
+
+const SURFER_ARM_FRAMES = [
+  {
+    suit: [
+      { x: 2, y: 8, w: 1, h: 4 },
+      { x: 12, y: 9, w: 1, h: 3 }
+    ],
+    skin: [
+      { x: 2, y: 12, w: 1, h: 1 },
+      { x: 12, y: 12, w: 1, h: 1 }
+    ]
+  },
+  {
+    suit: [
+      { x: 2, y: 9, w: 1, h: 3 },
+      { x: 12, y: 8, w: 1, h: 4 }
+    ],
+    skin: [
+      { x: 2, y: 12, w: 1, h: 1 },
+      { x: 12, y: 12, w: 1, h: 1 }
+    ]
+  }
 ];
 
-const SPRITE_W = 20;
-const SPRITE_H = 18;
+const WAVE_POINTS = [
+  { x: 0.00, y: 0.72 },
+  { x: 0.07, y: 0.67 },
+  { x: 0.14, y: 0.60 },
+  { x: 0.20, y: 0.55 },
+  { x: 0.24, y: 0.52 },
+  { x: 0.28, y: 0.54 },
+  { x: 0.36, y: 0.59 },
+  { x: 0.48, y: 0.66 },
+  { x: 0.62, y: 0.73 },
+  { x: 0.78, y: 0.80 },
+  { x: 1.00, y: 0.83 }
+];
 
-function drawSpriteLayer(ctx, rows, x, y, colorOverride, offsetX = 0, offsetY = 0) {
-  rows.forEach((row, ry) => {
-    row.forEach((key, rx) => {
-      if (!key || !C[key]) return;
-      ctx.fillStyle = colorOverride || C[key];
-      ctx.fillRect(
-        Math.floor(x + rx * NES.PX + offsetX),
-        Math.floor(y + ry * NES.PX + offsetY),
-        NES.PX, NES.PX
-      );
-    });
+const LIP_POINTS = [
+  { x: 0.03, y: 0.74 },
+  { x: 0.07, y: 0.66 },
+  { x: 0.13, y: 0.58 },
+  { x: 0.18, y: 0.53 },
+  { x: 0.24, y: 0.52 }
+];
+
+function lerp(a, b, t) {
+  return a + (b - a) * t;
+}
+
+function quantize(value) {
+  return Math.round(value / HERO.PX) * HERO.PX;
+}
+
+function sampleWaveY(ratio, height) {
+  const clamped = Math.max(0, Math.min(1, ratio));
+  for (let i = 0; i < WAVE_POINTS.length - 1; i++) {
+    const left = WAVE_POINTS[i];
+    const right = WAVE_POINTS[i + 1];
+    if (clamped >= left.x && clamped <= right.x) {
+      const t = (clamped - left.x) / (right.x - left.x || 1);
+      return lerp(left.y, right.y, t) * height;
+    }
+  }
+  return WAVE_POINTS[WAVE_POINTS.length - 1].y * height;
+}
+
+function drawPixelStroke(ctx, points, color, thickness = 1) {
+  ctx.fillStyle = color;
+  for (let i = 0; i < points.length - 1; i++) {
+    const start = points[i];
+    const end = points[i + 1];
+    const steps = Math.max(
+      Math.abs(Math.round((end.x - start.x) / HERO.PX)),
+      Math.abs(Math.round((end.y - start.y) / HERO.PX)),
+      1
+    ) * 2;
+
+    for (let step = 0; step <= steps; step++) {
+      const t = step / steps;
+      const x = quantize(lerp(start.x, end.x, t));
+      const y = quantize(lerp(start.y, end.y, t));
+      for (let dx = 0; dx < thickness; dx++) {
+        for (let dy = 0; dy < thickness; dy++) {
+          ctx.fillRect(x + dx * HERO.PX, y + dy * HERO.PX, HERO.PX, HERO.PX);
+        }
+      }
+    }
+  }
+}
+
+function drawRectSet(ctx, rects, baseX, baseY, color, offsetX = 0, offsetY = 0) {
+  ctx.fillStyle = color;
+  rects.forEach(rect => {
+    ctx.fillRect(
+      Math.floor(baseX + rect.x * HERO.PX + offsetX),
+      Math.floor(baseY + rect.y * HERO.PX + offsetY),
+      rect.w * HERO.PX,
+      rect.h * HERO.PX
+    );
   });
 }
 
-function drawSprite(ctx, frame, x, y) {
-  const rows = FRAMES[frame % FRAMES.length];
-  drawSpriteLayer(ctx, rows, x, y, C.outline, -1, 0);
-  drawSpriteLayer(ctx, rows, x, y, C.outline, 1, 0);
-  drawSpriteLayer(ctx, rows, x, y, C.outline, 0, -1);
-  drawSpriteLayer(ctx, rows, x, y, C.outline, 0, 1);
-  drawSpriteLayer(ctx, rows, x, y, null, 0, 0);
+function drawOutlinedRectSet(ctx, rects, baseX, baseY, color) {
+  drawRectSet(ctx, rects, baseX, baseY, C.outline, -1, 0);
+  drawRectSet(ctx, rects, baseX, baseY, C.outline, 1, 0);
+  drawRectSet(ctx, rects, baseX, baseY, C.outline, 0, -1);
+  drawRectSet(ctx, rects, baseX, baseY, C.outline, 0, 1);
+  drawRectSet(ctx, rects, baseX, baseY, color, 0, 0);
+}
+
+function drawSurfer(ctx, baseX, baseY, frameIndex) {
+  const arms = SURFER_ARM_FRAMES[frameIndex % SURFER_ARM_FRAMES.length];
+  drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.bald, baseX, baseY, C.bald);
+  drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.skin, baseX, baseY, C.skin);
+  drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.beard, baseX, baseY, C.beard);
+  drawRectSet(ctx, SURFER_BASE_RECTS.beardShade, baseX, baseY, C.beardShade);
+  drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.suit, baseX, baseY, C.suit);
+  drawRectSet(ctx, SURFER_BASE_RECTS.suitShade, baseX, baseY, C.suitShade);
+  drawOutlinedRectSet(ctx, arms.suit, baseX, baseY, C.suit);
+  drawOutlinedRectSet(ctx, arms.skin, baseX, baseY, C.skin);
+  drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.toes, baseX, baseY, C.skin);
 }
 
 function drawScene(canvas, t) {
   const ctx = canvas.getContext('2d');
   ctx.imageSmoothingEnabled = false;
 
-  const W  = canvas.width;
-  const H  = canvas.height;
-  const PX = NES.PX;
-  const NW = Math.ceil(W / PX);
-  const NH = Math.ceil(H / PX);
+  const W = canvas.width;
+  const H = canvas.height;
+  const PX = HERO.PX;
+  const horizonY = Math.floor(H * 0.46);
+  const frame = Math.floor(t / (1000 / HERO.FPS)) % SURFER_ARM_FRAMES.length;
+  const drift = Math.sin(t * 0.00035) * PX * 2;
 
-  const scrollPx = (t * 0.00009) % 1;
-  const scrollN  = Math.floor(scrollPx * NW);
-
-  // A slow glide across a flatter, soft longboard shoulder.
-  const rideDur = 26000;
-  const rideProgress = (t % rideDur) / rideDur;
-  const surferNX = Math.floor(NW * (0.7 - rideProgress * 0.24));
-  const bob = Math.round(Math.sin(t * 0.001) * 1);
-  const horizonNY = Math.floor(NH * 0.27);
-  const flatNY = NH - 4;
-  const shoulderBase = Math.floor(NH * 0.61);
-  const lipTop = Math.floor(NH * 0.5);
-  const foamBase = Math.floor(NH * 0.57);
-  const whitewaterFloor = Math.floor(NH * 0.64);
-  const pocketDist = -4;
-  const foamStartDist = pocketDist - 8;
-  const shoulderRun = 72;
-  const surferFaceY = shoulderBase + bob - 1;
-
-  function waveSurface(nx) {
-    const dist = surferNX - nx;
-    if (dist < foamStartDist) {
-      const frac = Math.min(1, (foamStartDist - dist) / 18);
-      return Math.round(whitewaterFloor + (flatNY - whitewaterFloor) * frac);
-    }
-    if (dist < pocketDist) {
-      const frac = (dist - foamStartDist) / (pocketDist - foamStartDist);
-      return Math.round(foamBase - (foamBase - lipTop) * frac);
-    }
-    if (dist < 4) {
-      const frac = (dist - pocketDist) / (4 - pocketDist);
-      return Math.round(lipTop + (shoulderBase - lipTop) * frac);
-    }
-    if (dist < shoulderRun) {
-      const frac = (dist - 4) / (shoulderRun - 4);
-      return Math.round(shoulderBase + (flatNY - shoulderBase) * frac);
-    }
-    return flatNY;
-  }
-
-  // ── Mirror entire scene: surfer faces right, wave breaks left (behind him) ──
-  ctx.save();
-  ctx.scale(-1, 1);
-  ctx.translate(-W, 0);
-
-  // ── Background ────────────────────────────────────────────────────────────
-  // Fill ocean blue, then paint sky & horizon on top
-  ctx.fillStyle = C.mid;
+  ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
 
-  for (let y = 0; y < 5; y++) {
-    ctx.fillStyle = y < 3 ? C.sky2 : C.sky1;
-    ctx.fillRect(0, y * PX, W, PX);
-  }
-  ctx.fillStyle = C.horiz;
-  ctx.fillRect(0, 5 * PX, W, PX);
-  ctx.fillStyle = C.far;
-  ctx.fillRect(0, 6 * PX, W, Math.max(PX * 2, (horizonNY - 6) * PX));
+  ctx.fillStyle = C.skyTop;
+  ctx.fillRect(0, 0, W, Math.floor(H * 0.26));
+  ctx.fillStyle = C.skyBright;
+  ctx.fillRect(0, Math.floor(H * 0.26), W, Math.floor(H * 0.12));
+  ctx.fillStyle = C.skyMid;
+  ctx.fillRect(0, Math.floor(H * 0.38), W, Math.floor(H * 0.16));
+  ctx.fillStyle = C.horizon;
+  ctx.fillRect(0, horizonY, W, PX * 2);
+  ctx.fillStyle = C.seaBack;
+  ctx.fillRect(0, horizonY + PX * 2, W, H - (horizonY + PX * 2));
 
-  // ── Wave columns ──────────────────────────────────────────────────────────
-  for (let nx = 0; nx < NW; nx++) {
-    const dist = surferNX - nx;
-    const crestNY = waveSurface(nx);
-    const x = nx * PX;
-    const inWhitewater = dist < foamStartDist;
-    const inPocket = dist >= foamStartDist && dist < 1;
-    const onShoulder = dist >= 1 && dist < shoulderRun;
-
-    if (dist >= pocketDist - 1 && dist <= 0) {
-      ctx.fillStyle = C.foam2;
-      ctx.fillRect(x, crestNY * PX, PX, PX);
-      ctx.fillStyle = C.foam1;
-      ctx.fillRect(x, (crestNY + 1) * PX, PX, PX);
-      ctx.fillRect(x, (crestNY + 2) * PX, PX, PX);
-      const lipOverhang = Math.max(0, Math.round((0 - dist) / 3));
-      if (lipOverhang > 0) {
-        ctx.fillStyle = C.spray;
-        ctx.fillRect(x, Math.max(0, crestNY - 1) * PX, PX, PX);
-      }
-    }
-
-    if (dist >= pocketDist - 2 && dist <= pocketDist + 2) {
-      for (let sy = 1; sy <= 4; sy++) {
-        const n = ((nx * 3 + sy * 9 + Math.floor(scrollN * 4)) % 10);
-        if (n < 5) {
-          ctx.fillStyle = n < 2 ? C.foam2 : C.spray;
-          ctx.fillRect(x, Math.max(0, crestNY - sy) * PX, PX, PX);
-        }
-      }
-    }
-
-    for (let ny = crestNY; ny < NH; ny++) {
-      const depth = ny - crestNY;
-      let col;
-      if (inWhitewater) {
-        const fn = ((nx * 7 + ny * 3 + Math.floor(scrollN * 5)) % 29);
-        col = fn < 4 ? C.foam1 : fn < 8 ? C.wwf : C.mid;
-      } else if (inPocket) {
-        if (depth < 3) col = C.foam1;
-        else if (depth < 5) col = C.wface;
-        else if (depth < 11) col = C.mid;
-        else col = C.deep;
-      } else if (onShoulder) {
-        if (depth < 2) col = C.foam1;
-        else if (depth < 6) col = C.wface;
-        else if (depth < 12) col = C.mid;
-        else col = C.deep;
-      } else {
-        if (depth < 2) col = C.wface;
-        else if (depth < 8) col = C.mid;
-        else col = C.deep;
-      }
-      ctx.fillStyle = col;
-      ctx.fillRect(x, ny * PX, PX, PX);
+  for (let x = 0; x < W; x += PX) {
+    const ratio = x / W;
+    const y = quantize(sampleWaveY(ratio, H));
+    for (let yy = y; yy < H; yy += PX) {
+      const depth = yy - y;
+      let color = C.faceDeep;
+      if (depth < PX * 2) color = C.faceTop;
+      else if (depth < PX * 12) color = C.faceMid;
+      ctx.fillStyle = color;
+      ctx.fillRect(x, yy, PX, PX);
     }
   }
 
-  // ── Surfer ────────────────────────────────────────────────────────────────
-  // Anchor nose a few cols to the right of surferNX in canvas space;
-  // after flip this puts the nose slightly ahead. Board tail extends left on screen.
-  const spriteX   = surferNX * PX - 6 * PX;
-  const spriteY   = surferFaceY * PX - SPRITE_H * PX;
+  const shoulderPoints = WAVE_POINTS.map(point => ({
+    x: point.x * W,
+    y: point.y * H
+  }));
+  drawPixelStroke(ctx, shoulderPoints, C.foamSoft, 1);
+  drawPixelStroke(ctx, shoulderPoints, C.foamBright, 1);
 
-  // Gentle sway — no dramatic tilt, just a slow lazy lean
-  const wobble    = Math.sin(t * 0.0004) * 0.018;
-  const tiltAngle = wobble;
-  const pivotX = spriteX + (SPRITE_W * PX) / 2;
-  const pivotY = spriteY + SPRITE_H * PX;
+  const lipPoints = LIP_POINTS.map(point => ({
+    x: point.x * W,
+    y: point.y * H
+  }));
+  drawPixelStroke(ctx, lipPoints, C.foamSoft, 2);
+  drawPixelStroke(ctx, lipPoints, C.foamBright, 1);
 
-  ctx.save();
-  ctx.translate(pivotX, pivotY);
-  ctx.rotate(tiltAngle);
-  ctx.translate(-pivotX, -pivotY);
-  const frame = Math.floor(t / (1000 / NES.FPS)) % FRAMES.length;
-  drawSprite(ctx, frame, spriteX, spriteY);
-  ctx.restore();  // sprite tilt
+  const foamTrail = [
+    { x: 0.02 * W, y: 0.76 * H },
+    { x: 0.05 * W, y: 0.70 * H },
+    { x: 0.09 * W, y: 0.64 * H }
+  ];
+  drawPixelStroke(ctx, foamTrail, C.foamBright, 1);
 
-  ctx.restore();  // horizontal mirror
+  for (let i = 0; i < 16; i++) {
+    const sprayPhase = (t * 0.002 + i * 7) % 24;
+    const sprayX = quantize(W * (0.03 + i * 0.005));
+    const sprayY = quantize(H * (0.70 + ((i % 4) * 0.018)) - sprayPhase);
+    if (sprayY > H * 0.58 && sprayY < H * 0.82) {
+      ctx.fillStyle = i % 3 === 0 ? C.foamBright : C.spray;
+      ctx.fillRect(sprayX, sprayY, PX, PX);
+    }
+  }
+
+  const boardStartRatio = 0.29 + drift / W;
+  const boardMidRatio = 0.39 + drift / W;
+  const boardEndRatio = 0.46 + drift / W;
+  const boardPoints = [
+    { x: boardStartRatio * W, y: sampleWaveY(boardStartRatio, H) - PX * 2 },
+    { x: boardMidRatio * W, y: sampleWaveY(boardMidRatio, H) - PX },
+    { x: boardEndRatio * W, y: sampleWaveY(boardEndRatio, H) - PX }
+  ].map(point => ({
+    x: quantize(point.x),
+    y: quantize(point.y)
+  }));
+
+  drawPixelStroke(ctx, boardPoints.map(point => ({ x: point.x, y: point.y + PX })), C.boardShade, 2);
+  drawPixelStroke(ctx, boardPoints, C.board, 2);
+  drawPixelStroke(ctx, [
+    { x: boardPoints[0].x + PX * 2, y: boardPoints[0].y },
+    { x: boardPoints[2].x - PX, y: boardPoints[2].y }
+  ], C.wax, 1);
+
+  const surferRatio = 0.39 + drift / W;
+  const surferBaseX = quantize(surferRatio * W - SURFER_W * PX / 2);
+  const surferBaseY = quantize(sampleWaveY(surferRatio, H) - SURFER_H * PX - PX * 2 + Math.sin(t * 0.0016) * PX);
+  drawSurfer(ctx, surferBaseX, surferBaseY, frame);
+
+  const noseSparkle = quantize((0.47 + drift / W) * W);
+  const noseSparkleY = quantize(sampleWaveY(0.47 + drift / W, H) - PX * 4);
+  ctx.fillStyle = C.foamBright;
+  ctx.fillRect(noseSparkle, noseSparkleY, PX, PX);
+  ctx.fillRect(noseSparkle + PX * 2, noseSparkleY + PX, PX, PX);
 }
 
 function startSurferAnimation() {
   const canvas = document.getElementById('surf-canvas');
   if (!canvas) return;
 
-  // Size canvas to match its CSS-rendered dimensions
   function resize() {
-    canvas.width  = canvas.offsetWidth;
+    canvas.width = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
   }
+
   resize();
   window.addEventListener('resize', resize);
 
@@ -1633,6 +1670,7 @@ function startSurferAnimation() {
     drawScene(canvas, ts);
     requestAnimationFrame(loop);
   }
+
   requestAnimationFrame(loop);
 }
 
