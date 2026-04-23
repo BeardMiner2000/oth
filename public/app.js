@@ -1001,7 +1001,12 @@ function buildPatchChannelCall(session) {
 }
 
 function buildFridayHeadline(verdict, session) {
-  return 'OTH DAWN PATROL';
+  if (verdict.cls === 'epic') return 'FRIDAY LOOKS LIKE A PROPER OTH DAWN PATROL';
+  if (verdict.cls === 'good') return 'FRIDAY LOOKS WORTH THE EARLY ALARM';
+  if (verdict.cls === 'marginal') return 'FRIDAY IS A CHECK THE CAM, POUR COFFEE TYPE';
+  if (verdict.cls === 'chunky') return 'FRIDAY MIGHT BE A LITTLE TOO SPICY';
+  if (verdict.cls === 'scary') return 'FRIDAY LOOKS LIKE A SHORTBOARD PROBLEM';
+  return 'FRIDAY LOOKS MORE LIKE A SHORE HANG';
 }
 
 function buildFridayCopy(session, verdict) {
