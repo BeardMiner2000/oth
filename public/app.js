@@ -1360,6 +1360,11 @@ const HERO = {
   PX: 4,
   FPS: 1
 };
+const HERO_EASTER_EGG = {
+  onNose: false,
+  progress: 0,
+  hitbox: null
+};
 
 const C = {
   bg: '#0a1f36',
@@ -1430,6 +1435,14 @@ const SURFER_BASE_RECTS = {
     { x: 8, y: 18, w: 3, h: 1 }
   ]
 };
+const SURFER_FRONT_TOES = [
+  { x: 5, y: 18, w: 2, h: 1 },
+  { x: 8, y: 18, w: 3, h: 1 }
+];
+const SURFER_BACK_TOES = [
+  { x: 5, y: 18, w: 2, h: 1 },
+  { x: 8, y: 18, w: 2, h: 1 }
+];
 
 const SURFER_ARM_FRAMES = [
   {
@@ -1543,6 +1556,7 @@ function drawOutlinedRectSet(ctx, rects, baseX, baseY, color) {
 
 function drawSurfer(ctx, baseX, baseY, frameIndex) {
   const arms = SURFER_ARM_FRAMES[frameIndex % SURFER_ARM_FRAMES.length];
+  const toeRects = HERO_EASTER_EGG.progress >= 0.65 ? SURFER_FRONT_TOES : SURFER_BACK_TOES;
   drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.bald, baseX, baseY, C.bald);
   drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.skin, baseX, baseY, C.skin);
   drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.beard, baseX, baseY, C.beard);
@@ -1551,7 +1565,7 @@ function drawSurfer(ctx, baseX, baseY, frameIndex) {
   drawRectSet(ctx, SURFER_BASE_RECTS.suitShade, baseX, baseY, C.suitShade);
   drawOutlinedRectSet(ctx, arms.suit, baseX, baseY, C.suit);
   drawOutlinedRectSet(ctx, arms.skin, baseX, baseY, C.skin);
-  drawOutlinedRectSet(ctx, SURFER_BASE_RECTS.toes, baseX, baseY, C.skin);
+  drawOutlinedRectSet(ctx, toeRects, baseX, baseY, C.skin);
 }
 
 function drawScene(canvas, t) {
@@ -1564,6 +1578,11 @@ function drawScene(canvas, t) {
   const horizonY = Math.floor(H * 0.46);
   const frame = Math.floor(t / (1000 / HERO.FPS)) % SURFER_ARM_FRAMES.length;
   const drift = Math.sin(t * 0.00025) * PX * 0.6;
+  const targetProgress = HERO_EASTER_EGG.onNose ? 1 : 0;
+  HERO_EASTER_EGG.progress += (targetProgress - HERO_EASTER_EGG.progress) * 0.09;
+  if (Math.abs(targetProgress - HERO_EASTER_EGG.progress) < 0.01) {
+    HERO_EASTER_EGG.progress = targetProgress;
+  }
 
   ctx.fillStyle = C.bg;
   ctx.fillRect(0, 0, W, H);
@@ -1643,9 +1662,17 @@ function drawScene(canvas, t) {
     { x: boardPoints[2].x - PX, y: boardPoints[2].y }
   ], C.wax, 1);
 
-  const surferBaseX = quantize(boardPoints[2].x - 10 * PX);
+  const backBaseX = quantize(boardPoints[0].x + 2 * PX);
+  const frontBaseX = quantize(boardPoints[2].x - 10 * PX);
+  const surferBaseX = quantize(lerp(backBaseX, frontBaseX, HERO_EASTER_EGG.progress));
   const surferBaseY = quantize(boardY - (SURFER_H - 1) * PX + Math.sin(t * 0.0012) * PX * 0.35);
   drawSurfer(ctx, surferBaseX, surferBaseY, frame);
+  HERO_EASTER_EGG.hitbox = {
+    x: surferBaseX,
+    y: surferBaseY,
+    w: SURFER_W * PX,
+    h: SURFER_H * PX
+  };
 
   const noseSparkle = quantize(boardPoints[2].x + PX);
   const noseSparkleY = quantize(boardY - PX * 3);
@@ -1665,6 +1692,16 @@ function startSurferAnimation() {
 
   resize();
   window.addEventListener('resize', resize);
+  canvas.addEventListener('click', event => {
+    const rect = canvas.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / rect.width) * canvas.width;
+    const y = ((event.clientY - rect.top) / rect.height) * canvas.height;
+    const hitbox = HERO_EASTER_EGG.hitbox;
+    if (!hitbox) return;
+    if (x >= hitbox.x && x <= hitbox.x + hitbox.w && y >= hitbox.y && y <= hitbox.y + hitbox.h) {
+      HERO_EASTER_EGG.onNose = !HERO_EASTER_EGG.onNose;
+    }
+  });
 
   function loop(ts) {
     drawScene(canvas, ts);
