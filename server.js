@@ -31,7 +31,7 @@ const NOAA_TIDE_STATIONS = {
   bolinas: '9414958'
 };
 const SNAPSHOT_PATH = path.join(__dirname, 'data', 'surfline-snapshots.json');
-const SURFLINE_SNAPSHOT_TTL_SEC = Number(process.env.SURFLINE_SNAPSHOT_TTL_SEC || 4 * 60 * 60);
+const SURFLINE_SNAPSHOT_TTL_SEC = Number(process.env.SURFLINE_SNAPSHOT_TTL_SEC || 24 * 60 * 60);
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
 const forecastCache = new NodeCache({ stdTTL: 30 * 60, checkperiod: 5 * 60 });
@@ -120,8 +120,10 @@ function setStoredSurflineSnapshot(spotKey, snapshot) {
 }
 
 function isFreshSnapshot(snapshot) {
-  if (!snapshot || !snapshot.fetchedAt) return false;
-  const ageSec = (Date.now() - new Date(snapshot.fetchedAt).getTime()) / 1000;
+  if (!snapshot) return false;
+  const freshnessAt = snapshot.receivedAt || snapshot.fetchedAt;
+  if (!freshnessAt) return false;
+  const ageSec = (Date.now() - new Date(freshnessAt).getTime()) / 1000;
   return ageSec >= 0 && ageSec <= SURFLINE_SNAPSHOT_TTL_SEC;
 }
 
@@ -203,11 +205,12 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
     const stormglassData = stormglassResult.status === 'fulfilled' ? stormglassResult.value : [];
     const snapshot = getStoredSurflineSnapshot(spotKey);
     const freshSnapshot = isFreshSnapshot(snapshot) ? snapshot : null;
+    const relaySnapshot = freshSnapshot || snapshot;
 
-    const waves = liveWaves.length > 0 ? liveWaves : (freshSnapshot?.wave || []);
-    const winds = liveWinds.length > 0 ? liveWinds : (freshSnapshot?.wind || []);
-    const sfTides = liveSfTides.length > 0 ? liveSfTides : (freshSnapshot?.tides || []);
-    const conds = liveConds.length > 0 ? liveConds : (freshSnapshot?.conditions || []);
+    const waves = liveWaves.length > 0 ? liveWaves : (relaySnapshot?.wave || []);
+    const winds = liveWinds.length > 0 ? liveWinds : (relaySnapshot?.wind || []);
+    const sfTides = liveSfTides.length > 0 ? liveSfTides : (relaySnapshot?.tides || []);
+    const conds = liveConds.length > 0 ? liveConds : (relaySnapshot?.conditions || []);
     const tides = sfTides.length > 0 ? sfTides : noaaTides;   // prefer Surfline tides
 
     // Merge wave + wind by timestamp
@@ -218,12 +221,12 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
 
     const waveSource = liveWaves.length > 0
       ? 'surfline'
-      : freshSnapshot && waves.length > 0
+      : relaySnapshot && waves.length > 0
         ? 'surfline_relay'
         : (stormglassData.length > 0 ? 'stormglass' : 'none');
     const tideSource = liveSfTides.length > 0
       ? 'surfline'
-      : freshSnapshot && sfTides.length > 0
+      : relaySnapshot && sfTides.length > 0
         ? 'surfline_relay'
         : (noaaTides.length > 0 ? 'noaa' : 'none');
 
@@ -237,9 +240,10 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
         waves: waveSource,
         tides: tideSource
       },
-      snapshotMeta: freshSnapshot ? {
-        fetchedAt: freshSnapshot.fetchedAt,
-        receivedAt: freshSnapshot.receivedAt || null
+      snapshotMeta: relaySnapshot ? {
+        fetchedAt: relaySnapshot.fetchedAt,
+        receivedAt: relaySnapshot.receivedAt || null,
+        stale: !freshSnapshot
       } : null,
       fetchedAt:      new Date().toISOString(),
       cached:         false,

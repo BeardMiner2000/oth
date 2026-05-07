@@ -15,4 +15,4 @@ services:
       - key: SURFLINE_SNAPSHOT_TOKEN
         sync: false
       - key: SURFLINE_SNAPSHOT_TTL_SEC
-        value: 14400
+        value: 86400
