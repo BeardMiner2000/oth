@@ -49,6 +49,9 @@ setInterval(() => {
 // ─── App ──────────────────────────────────────────────────────────────────────
 const app  = express();
 const PORT = process.env.PORT || 3000;
+const fitPublicPath = path.join(__dirname, 'public', 'fit');
+const FIT_AUTH_USER = 'jl';
+const FIT_AUTH_PASS = 'jl';
 
 app.use(cors({
   origin(origin, callback) {
@@ -59,9 +62,36 @@ app.use(cors({
   }
 }));
 app.use(express.json());
+app.use((req, res, next) => {
+  const host = (req.headers.host || '').split(':')[0];
+  if (host !== 'fit.oth.surf' && host !== 'www.fit.oth.surf') {
+    return next();
+  }
+
+  return requireFitAuth(req, res, () => express.static(fitPublicPath)(req, res, next));
+});
+app.use('/fit', requireFitAuth, express.static(fitPublicPath));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function requireFitAuth(req, res, next) {
+  const auth = req.headers.authorization || '';
+  const [scheme, encoded] = auth.split(' ');
+  const credentials = scheme === 'Basic' && encoded
+    ? Buffer.from(encoded, 'base64').toString('utf8')
+    : '';
+  const separatorIndex = credentials.indexOf(':');
+  const username = separatorIndex >= 0 ? credentials.slice(0, separatorIndex) : '';
+  const password = separatorIndex >= 0 ? credentials.slice(separatorIndex + 1) : '';
+
+  if (username === FIT_AUTH_USER && password === FIT_AUTH_PASS) {
+    return next();
+  }
+
+  res.set('WWW-Authenticate', 'Basic realm="Surf/Fit Daily"');
+  return res.status(401).send('Authentication required');
+}
 
 /**
  * Zip wave + wind arrays by timestamp proximity (both have 3-hour intervals).

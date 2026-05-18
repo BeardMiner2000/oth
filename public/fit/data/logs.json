@@ -1,0 +1,20 @@
+[
+  {
+    "date": "2026-05-18",
+    "weight": "245 lbs",
+    "weightLbs": 245,
+    "fastingWindow": "",
+    "food": "Baseline log created from current Surf/Fit reset context.",
+    "waterElectrolytes": "",
+    "waterBottles": null,
+    "creatine": "",
+    "workoutSurf": "",
+    "workoutDone": false,
+    "surfDone": false,
+    "sleep": "",
+    "energyMood": "",
+    "alcohol": "",
+    "alcoholDrinks": 0,
+    "raw": "Baseline: current weight 245 lbs."
+  }
+]

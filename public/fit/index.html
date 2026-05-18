@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Surf/Fit Daily dashboard for keto, fasting, workouts, and Friday surf." />
+  <title>Surf/Fit Daily</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=VT323&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app-shell">
+    <section class="hero-card" aria-labelledby="page-title">
+      <div class="hero-topline">
+        <span id="today-date">Loading date</span>
+        <span>Keto Reset / Foundation</span>
+      </div>
+      <div class="hero-copy">
+        <p class="eyebrow">fit.oth.surf</p>
+        <h1 id="page-title">Surf/Fit Daily</h1>
+        <p id="today-focus" class="today-focus">Eat clean, move daily, protect the glide.</p>
+      </div>
+      <div class="ocean-meter" aria-hidden="true">
+        <div class="sun"></div>
+        <div class="wave-line wave-one"></div>
+        <div class="wave-line wave-two"></div>
+        <div class="board-line"></div>
+      </div>
+      <div class="streak-grid" aria-label="Weekly status placeholders">
+        <div class="stat-tile">
+          <span>Keto streak</span>
+          <strong>0 days</strong>
+        </div>
+        <div class="stat-tile">
+          <span>Workout streak</span>
+          <strong>0 days</strong>
+        </div>
+        <div class="stat-tile">
+          <span>Surf this week</span>
+          <strong>0 / 2</strong>
+        </div>
+        <div class="stat-tile">
+          <span>Alcohol this week</span>
+          <strong>0 / 2</strong>
+        </div>
+      </div>
+    </section>
+
+    <section class="card wod-card" aria-labelledby="wod-title">
+      <div class="section-heading">
+        <p class="eyebrow">Daily WOD</p>
+        <h2 id="wod-title">Loading workout</h2>
+      </div>
+      <div class="wod-meta">
+        <span id="wod-duration">-- min</span>
+        <span id="wod-intensity">Moderate</span>
+        <span id="wod-equipment">Bodyweight</span>
+      </div>
+      <div class="wod-blocks">
+        <article>
+          <h3>Warmup</h3>
+          <ul id="wod-warmup"></ul>
+        </article>
+        <article>
+          <h3>Main</h3>
+          <ul id="wod-main"></ul>
+        </article>
+        <article>
+          <h3>Cooldown</h3>
+          <ul id="wod-cooldown"></ul>
+        </article>
+      </div>
+      <p id="wod-benefit" class="surf-benefit"></p>
+    </section>
+
+    <section class="card keto-card" aria-labelledby="keto-title">
+      <div class="section-heading">
+        <p class="eyebrow">Food / Keto Status</p>
+        <h2 id="keto-title">Today’s targets</h2>
+      </div>
+      <div class="target-grid">
+        <div><span>Eating window</span><strong id="target-window"></strong></div>
+        <div><span>Net carbs</span><strong id="target-carbs"></strong></div>
+        <div><span>Protein</span><strong id="target-protein"></strong></div>
+        <div><span>Calories</span><strong id="target-calories"></strong></div>
+        <div><span>Water</span><strong id="target-water"></strong></div>
+        <div><span>Electrolytes</span><strong id="target-electrolytes"></strong></div>
+        <div><span>Alcohol</span><strong id="target-alcohol"></strong></div>
+      </div>
+      <div class="rule-strip">
+        <h3>Today’s Keto Rules</h3>
+        <ul id="keto-rules"></ul>
+      </div>
+    </section>
+
+    <section class="surf-protect" aria-labelledby="friday-title">
+      <p class="eyebrow">Friday Surf Optimization</p>
+      <h2 id="friday-title">Friday morning surf is sacred.</h2>
+      <ul>
+        <li>Thursday is a light day.</li>
+        <li>No hard leg workouts Thursday.</li>
+        <li>Hydrate hard Thursday.</li>
+        <li>Clean keto Thursday.</li>
+        <li>Sleep is the workout Thursday night.</li>
+      </ul>
+    </section>
+
+    <section class="card" aria-labelledby="metrics-title">
+      <div class="section-heading">
+        <p class="eyebrow">Progress / Metrics</p>
+        <h2 id="metrics-title">Consistency first</h2>
+      </div>
+      <div class="metric-grid">
+        <div><span>Current weight</span><strong>245 lbs</strong></div>
+        <div><span>Recent best</span><strong>220 lbs</strong></div>
+        <div><span>Next milestone</span><strong>235 lbs</strong></div>
+        <div><span>Goal trend</span><strong>Consistency first</strong></div>
+        <div><span>Body fat %</span><strong>Manual</strong></div>
+        <div><span>Visceral fat</span><strong>Manual</strong></div>
+        <div><span>Muscle mass</span><strong>Manual</strong></div>
+        <div><span>Body water</span><strong>Manual</strong></div>
+      </div>
+    </section>
+
+    <section class="card tracking-card" aria-labelledby="tracking-title">
+      <div class="section-heading">
+        <p class="eyebrow">Daily Tracking</p>
+        <h2 id="tracking-title">Log trend board</h2>
+      </div>
+      <div class="chart-grid">
+        <article class="chart-panel">
+          <div>
+            <span>Weight trend</span>
+            <strong id="weight-trend-value">--</strong>
+          </div>
+          <div id="weight-chart" class="mini-chart" aria-label="Weight trend chart"></div>
+        </article>
+        <article class="chart-panel">
+          <div>
+            <span>Water</span>
+            <strong id="water-trend-value">--</strong>
+          </div>
+          <div id="water-chart" class="mini-chart" aria-label="Water intake trend chart"></div>
+        </article>
+        <article class="chart-panel">
+          <div>
+            <span>Exercise days</span>
+            <strong id="workout-trend-value">--</strong>
+          </div>
+          <div id="workout-chart" class="mini-chart bar-chart" aria-label="Workout trend chart"></div>
+        </article>
+      </div>
+      <article class="latest-log">
+        <h3>Latest daily wrap</h3>
+        <dl id="latest-log-list"></dl>
+      </article>
+    </section>
+
+    <section class="card template-card" aria-labelledby="log-title">
+      <div class="section-heading">
+        <p class="eyebrow">Log Entry</p>
+        <h2 id="log-title">ChatGPT check-in</h2>
+      </div>
+      <button id="copy-log" class="copy-button" type="button">Copy template</button>
+      <pre id="log-template" tabindex="0">Date:
+Weight:
+Fasting window:
+Food:
+Water/electrolytes:
+Creatine:
+Workout/surf:
+Sleep:
+Energy/mood:
+Alcohol:</pre>
+      <p id="copy-status" class="copy-status" role="status"></p>
+    </section>
+
+    <section class="card soul-card" aria-labelledby="soul-title">
+      <div class="section-heading">
+        <p class="eyebrow">Daily Soul Log</p>
+        <h2 id="soul-title">5-minute stillness</h2>
+      </div>
+      <p class="prompt">Where am I trying to force fruit instead of abiding?</p>
+      <textarea aria-label="Daily reflection" placeholder="Reflection..."></textarea>
+    </section>
+
+    <section class="weekly-board" aria-labelledby="week-title">
+      <div class="section-heading">
+        <p class="eyebrow">Weekly Rhythm</p>
+        <h2 id="week-title">Protect energy, build consistency</h2>
+      </div>
+      <div id="weekly-grid" class="weekly-grid"></div>
+    </section>
+
+    <footer class="app-footer">
+      <span>Last updated: <time id="last-updated">--</time></span>
+      <span>Surf/Fit Daily for OTH</span>
+    </footer>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

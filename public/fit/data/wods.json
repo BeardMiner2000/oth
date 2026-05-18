@@ -1,0 +1,173 @@
+{
+  "monday": {
+    "weeklyPlan": "Metabolic circuit + walk",
+    "focus": "Metabolic reset, steady sweat, and a clean keto start.",
+    "title": "Metabolic Circuit + Walk",
+    "duration": "35-45 min",
+    "intensity": "Moderate",
+    "equipment": "Bodyweight, kettlebell optional",
+    "warmup": [
+      "5-minute easy walk",
+      "10 air squats",
+      "10 hip hinges",
+      "10 shoulder circles each way"
+    ],
+    "main": [
+      "4 rounds: 10 squats, 8 pushups, 12 reverse lunges, 20 mountain climbers",
+      "Rest 60-90 seconds between rounds",
+      "Finish with a 20-minute brisk walk"
+    ],
+    "cooldown": [
+      "2-minute nasal breathing",
+      "Couch stretch, 45 seconds each side",
+      "Easy forward fold, 60 seconds"
+    ],
+    "surfBenefit": "Builds the base engine for longer sessions without cooking your legs early in the week."
+  },
+  "tuesday": {
+    "weeklyPlan": "Surf if possible, otherwise Zone 2 cardio + mobility",
+    "focus": "Get water time if conditions line up; otherwise build aerobic glide.",
+    "title": "Surf Option or Zone 2 + Mobility",
+    "duration": "40-60 min",
+    "intensity": "Light / Moderate",
+    "equipment": "Surfboard or walking shoes",
+    "warmup": [
+      "5-minute easy walk",
+      "Cat-cow x 8",
+      "World's greatest stretch x 4 each side"
+    ],
+    "main": [
+      "Surf if possible",
+      "If not surfing: 35-45 minutes Zone 2 walk, bike, or easy jog",
+      "Keep breathing controlled and conversational"
+    ],
+    "cooldown": [
+      "Shoulder opener, 60 seconds",
+      "90/90 hips, 60 seconds each side",
+      "2-minute relaxed breathing"
+    ],
+    "surfBenefit": "Zone 2 work improves paddle stamina and recovery between waves."
+  },
+  "wednesday": {
+    "weeklyPlan": "Strength / pop-up power / bodyweight work",
+    "focus": "Pop-up power, core stiffness, and practical strength.",
+    "title": "Pop-Up Power Strength",
+    "duration": "30-40 min",
+    "intensity": "Moderate / Hard",
+    "equipment": "Bodyweight, dumbbells optional",
+    "warmup": [
+      "5-minute walk",
+      "10 glute bridges",
+      "8 inchworms",
+      "20-second plank"
+    ],
+    "main": [
+      "5 rounds: 5 controlled pop-ups, 10 pushups, 12 squats, 30-second plank",
+      "Optional: 3 sets of 10 dumbbell rows each side",
+      "Stop one rep before form breaks"
+    ],
+    "cooldown": [
+      "Child's pose, 60 seconds",
+      "Hip flexor stretch, 60 seconds each side",
+      "Thoracic rotations x 6 each side"
+    ],
+    "surfBenefit": "Sharpens the transition from paddle to feet while keeping shoulders and trunk honest."
+  },
+  "thursday": {
+    "weeklyPlan": "Light mobility + easy walk only. Protect Friday surf energy.",
+    "focus": "Downshift, hydrate, and leave your legs fresh for Friday.",
+    "title": "Friday Prep Mobility",
+    "duration": "20-35 min",
+    "intensity": "Light",
+    "equipment": "Mat, walking shoes",
+    "warmup": [
+      "5-minute easy walk",
+      "Gentle neck rolls",
+      "Shoulder circles x 10 each way"
+    ],
+    "main": [
+      "20-minute easy walk",
+      "90/90 hips, 2 minutes",
+      "Thoracic open books x 8 each side",
+      "Calf and hamstring mobility, 2 minutes"
+    ],
+    "cooldown": [
+      "Legs up the wall, 3 minutes",
+      "Magnesium at night",
+      "Lights down early"
+    ],
+    "surfBenefit": "Protects Friday dawn patrol by banking recovery instead of chasing fatigue."
+  },
+  "friday": {
+    "weeklyPlan": "Morning surf session. Optional evening stretch only.",
+    "focus": "Morning surf is the workout. Fuel clean and keep the day simple.",
+    "title": "Friday Dawn Patrol",
+    "duration": "Surf session + 10 min",
+    "intensity": "Surf dependent",
+    "equipment": "Board, wetsuit, water",
+    "warmup": [
+      "5-minute beach walk",
+      "Shoulder circles x 20",
+      "Hip openers x 8 each side"
+    ],
+    "main": [
+      "Surf in the morning",
+      "Focus on calm paddling, clean positioning, and smooth pop-ups",
+      "Optional evening stretch only"
+    ],
+    "cooldown": [
+      "Rinse, hydrate, and salt up",
+      "Easy hip flexor stretch",
+      "Protein-first first meal"
+    ],
+    "surfBenefit": "This is the priority session. Show up fresh, surf present, and leave with energy."
+  },
+  "saturday": {
+    "weeklyPlan": "Second surf if possible, otherwise long walk/hike/run.",
+    "focus": "Second water touch or long aerobic work.",
+    "title": "Second Surf or Long Easy Engine",
+    "duration": "45-90 min",
+    "intensity": "Moderate",
+    "equipment": "Surfboard or trail shoes",
+    "warmup": [
+      "5-minute easy walk",
+      "Dynamic hamstring sweeps x 10",
+      "Shoulder opener x 60 seconds"
+    ],
+    "main": [
+      "Surf if possible",
+      "If not surfing: long walk, hike, or easy run",
+      "Keep intensity steady, not heroic"
+    ],
+    "cooldown": [
+      "Slow walk, 5 minutes",
+      "Calf stretch, 60 seconds each side",
+      "Hydrate before dinner"
+    ],
+    "surfBenefit": "Adds the second weekly surf touch or the aerobic base that makes paddling feel easier."
+  },
+  "sunday": {
+    "weeklyPlan": "Mobility + meal prep + optional light workout.",
+    "focus": "Reset the kitchen, loosen the body, and make Monday easy.",
+    "title": "Mobility + Meal Prep Reset",
+    "duration": "25-45 min",
+    "intensity": "Light",
+    "equipment": "Mat, kitchen plan",
+    "warmup": [
+      "5-minute easy walk",
+      "Cat-cow x 8",
+      "Ankle rocks x 10 each side"
+    ],
+    "main": [
+      "20-minute full-body mobility",
+      "Optional: 2 easy rounds of squats, pushups, and planks",
+      "Prep protein and low-carb food for the next two days"
+    ],
+    "cooldown": [
+      "Box breathing, 2 minutes",
+      "Write tomorrow's first meal",
+      "Set water bottle plan"
+    ],
+    "surfBenefit": "Keeps the body loose and removes food friction before the week starts."
+  }
+}
