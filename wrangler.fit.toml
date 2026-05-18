@@ -1,0 +1,12 @@
+name = "fit-oth-surf"
+main = "workers/fit-auth.js"
+compatibility_date = "2026-05-18"
+
+routes = [
+  { pattern = "fit.oth.surf/*", zone_name = "oth.surf" }
+]
+
+[assets]
+directory = "./public/fit"
+binding = "ASSETS"
+run_worker_first = true
