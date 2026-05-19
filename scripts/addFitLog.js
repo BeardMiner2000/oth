@@ -108,6 +108,11 @@ function numberFromText(value) {
 
 function waterBottlesFromText(value) {
   if (!value) return null;
+  const ounceMatch = String(value).match(/(\d+(\.\d+)?)\s*(oz|ounces)/i);
+  if (ounceMatch) {
+    return Number((Number(ounceMatch[1]) / 24).toFixed(1));
+  }
+
   const bottleMatch = String(value).match(/(\d+(\.\d+)?)\s*(\+)?\s*(owalla|bottle)/i);
   return bottleMatch ? Number(bottleMatch[1]) : numberFromText(value);
 }
