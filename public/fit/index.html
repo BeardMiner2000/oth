@@ -31,19 +31,19 @@
       <div class="streak-grid" aria-label="Weekly status placeholders">
         <div class="stat-tile">
           <span>Keto streak</span>
-          <strong>0 days</strong>
+          <strong id="keto-streak">0 days</strong>
         </div>
         <div class="stat-tile">
           <span>Workout streak</span>
-          <strong>0 days</strong>
+          <strong id="workout-streak">0 days</strong>
         </div>
         <div class="stat-tile">
           <span>Surf this week</span>
-          <strong>0 / 2</strong>
+          <strong id="surf-week">0 / 2</strong>
         </div>
         <div class="stat-tile">
           <span>Alcohol this week</span>
-          <strong>0 / 2</strong>
+          <strong id="alcohol-week">0 / 2</strong>
         </div>
       </div>
     </section>
@@ -113,7 +113,7 @@
         <h2 id="metrics-title">Consistency first</h2>
       </div>
       <div class="metric-grid">
-        <div><span>Current weight</span><strong>245 lbs</strong></div>
+        <div><span>Current weight</span><strong id="current-weight">245 lbs</strong></div>
         <div><span>Recent best</span><strong>220 lbs</strong></div>
         <div><span>Next milestone</span><strong>235 lbs</strong></div>
         <div><span>Goal trend</span><strong>Consistency first</strong></div>
@@ -156,6 +156,10 @@
         <h3>Latest daily wrap</h3>
         <dl id="latest-log-list"></dl>
       </article>
+      <article class="latest-log">
+        <h3>Recent logs</h3>
+        <div id="log-history" class="log-history"></div>
+      </article>
     </section>
 
     <section class="card template-card" aria-labelledby="log-title">
@@ -173,7 +177,9 @@ Creatine:
 Workout/surf:
 Sleep:
 Energy/mood:
-Alcohol:</pre>
+Alcohol:
+Estimated macros:
+Coach notes:</pre>
       <p id="copy-status" class="copy-status" role="status"></p>
     </section>
 

@@ -134,6 +134,7 @@ function renderTracking(logs) {
   renderLineChart('weight-chart', sortedLogs, 'weightLbs', '#5b9bd5');
   renderLineChart('water-chart', sortedLogs, 'waterBottles', '#4db6a0');
   renderBarChart('workout-chart', sortedLogs);
+  renderHeroStats(sortedLogs);
 
   document.getElementById('weight-trend-value').textContent = latest?.weightLbs
     ? `${latest.weightLbs} lbs`
@@ -142,7 +143,22 @@ function renderTracking(logs) {
     ? `${latest.waterBottles} bottles`
     : '--';
   document.getElementById('workout-trend-value').textContent = `${sortedLogs.filter(log => log.workoutDone || log.surfDone).length}/${sortedLogs.length || 0}`;
+  document.getElementById('current-weight').textContent = latest?.weightLbs ? `${latest.weightLbs} lbs` : '245 lbs';
   renderLatestLog(latest);
+  renderLogHistory(sortedLogs);
+}
+
+function renderHeroStats(logs) {
+  const thisWeekLogs = logs.filter(log => isThisWeek(log.date));
+  const ketoStreak = countTrailing(logs, log => Number(log.netCarbsEstimate) <= 30);
+  const workoutStreak = countTrailing(logs, log => log.workoutDone || log.surfDone);
+  const surfCount = thisWeekLogs.filter(log => log.surfDone).length;
+  const alcoholCount = thisWeekLogs.reduce((total, log) => total + (Number(log.alcoholDrinks) || 0), 0);
+
+  document.getElementById('keto-streak').textContent = `${ketoStreak} day${ketoStreak === 1 ? '' : 's'}`;
+  document.getElementById('workout-streak').textContent = `${workoutStreak} day${workoutStreak === 1 ? '' : 's'}`;
+  document.getElementById('surf-week').textContent = `${surfCount} / 2`;
+  document.getElementById('alcohol-week').textContent = `${alcoholCount} / 2`;
 }
 
 function renderLineChart(id, logs, key, color) {
@@ -220,19 +236,95 @@ function renderLatestLog(log) {
     ['Date', log.date],
     ['Fasting', log.fastingWindow || '--'],
     ['Food', log.food || '--'],
+    ['Water / electrolytes', log.waterElectrolytes || '--'],
+    ['Creatine', log.creatine || '--'],
     ['Workout / surf', log.workoutSurf || '--'],
     ['Sleep', log.sleep || '--'],
     ['Energy / mood', log.energyMood || '--'],
-    ['Alcohol', log.alcohol || '--']
+    ['Alcohol', log.alcohol || '--'],
+    ['Estimated macros', log.estimatedMacros || '--'],
+    ['Coach notes', log.coachNotes || '--']
   ];
 
   rows.forEach(([label, value]) => {
     const dt = document.createElement('dt');
     const dd = document.createElement('dd');
     dt.textContent = label;
-    dd.textContent = value;
+    appendLogValue(dd, value);
     list.append(dt, dd);
   });
+}
+
+function renderLogHistory(logs) {
+  const history = document.getElementById('log-history');
+  history.textContent = '';
+
+  logs.slice(-7).reverse().forEach(log => {
+    const card = document.createElement('article');
+    card.className = 'history-entry';
+
+    const title = document.createElement('h4');
+    title.textContent = formatDateLabel(log.date);
+
+    const meta = document.createElement('p');
+    const workoutLabel = log.surfDone ? 'Surf' : (log.workoutDone ? 'Workout' : 'Recovery');
+    meta.textContent = `${log.weightLbs || '--'} lbs · ${log.waterBottles || '--'} bottles · ${workoutLabel} · ${Number(log.alcoholDrinks) || 0} drinks`;
+
+    const notes = document.createElement('p');
+    notes.textContent = log.coachNotes || log.energyMood || log.workoutSurf || 'Logged.';
+
+    card.append(title, meta, notes);
+    history.appendChild(card);
+  });
+}
+
+function appendLogValue(parent, value) {
+  const text = String(value || '--');
+  const items = text.split(/\s+-\s+/).map(item => item.replace(/^-\s*/, '').trim()).filter(Boolean);
+
+  if (items.length < 2) {
+    parent.textContent = text;
+    return;
+  }
+
+  const list = document.createElement('ul');
+  items.forEach(item => {
+    const li = document.createElement('li');
+    li.textContent = item;
+    list.appendChild(li);
+  });
+  parent.appendChild(list);
+}
+
+function countTrailing(logs, predicate) {
+  let count = 0;
+
+  for (let i = logs.length - 1; i >= 0; i -= 1) {
+    if (!predicate(logs[i])) break;
+    count += 1;
+  }
+
+  return count;
+}
+
+function isThisWeek(date) {
+  const today = new Date();
+  const day = today.getDay() || 7;
+  const monday = new Date(today);
+  monday.setHours(0, 0, 0, 0);
+  monday.setDate(today.getDate() - day + 1);
+
+  const logDate = new Date(`${date}T12:00:00`);
+  return logDate >= monday && logDate <= today;
+}
+
+function formatDateLabel(date) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: PACIFIC_TIME_ZONE,
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date(`${date}T12:00:00`));
 }
 
 async function copyText(text) {

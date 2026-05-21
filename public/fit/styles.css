@@ -447,6 +447,40 @@ li:last-child {
   line-height: 1.4;
 }
 
+.latest-log dd ul {
+  margin-top: 0;
+}
+
+.log-history {
+  display: grid;
+  gap: 10px;
+}
+
+.history-entry {
+  border: 1px solid var(--dim-line);
+  border-radius: 3px;
+  padding: 12px;
+  background: rgba(91, 155, 213, 0.08);
+}
+
+.history-entry h4 {
+  margin: 0 0 6px;
+  color: var(--paper);
+  font-size: 1rem;
+}
+
+.history-entry p {
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.history-entry p:last-child {
+  margin-bottom: 0;
+  color: var(--ink);
+}
+
 .template-card {
   position: relative;
 }
