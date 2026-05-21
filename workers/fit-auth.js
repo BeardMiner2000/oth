@@ -1,6 +1,7 @@
-const USERNAME = 'jl';
-const PASSWORD = 'jl';
+const USERNAME = 'JL';
+const PASSWORD = 'silver99';
 const COOKIE_NAME = 'fit_auth';
+const COOKIE_VALUE = '2';
 
 export default {
   async fetch(request, env) {
@@ -17,7 +18,7 @@ export default {
     const authedResponse = new Response(response.body, response);
     authedResponse.headers.append(
       'Set-Cookie',
-      `${COOKIE_NAME}=1; Path=/; Max-Age=86400; Secure; HttpOnly; SameSite=Lax`
+      `${COOKIE_NAME}=${COOKIE_VALUE}; Path=/; Max-Age=86400; Secure; HttpOnly; SameSite=Lax`
     );
     return authedResponse;
   }
@@ -44,5 +45,5 @@ function isAuthorized(request) {
 
 function hasAuthCookie(request) {
   const cookie = request.headers.get('cookie') || '';
-  return cookie.split(';').some(part => part.trim() === `${COOKIE_NAME}=1`);
+  return cookie.split(';').some(part => part.trim() === `${COOKIE_NAME}=${COOKIE_VALUE}`);
 }

@@ -50,8 +50,8 @@ setInterval(() => {
 const app  = express();
 const PORT = process.env.PORT || 3000;
 const fitPublicPath = path.join(__dirname, 'public', 'fit');
-const FIT_AUTH_USER = 'jl';
-const FIT_AUTH_PASS = 'jl';
+const FIT_AUTH_USER = 'JL';
+const FIT_AUTH_PASS = 'silver99';
 
 app.use(cors({
   origin(origin, callback) {
