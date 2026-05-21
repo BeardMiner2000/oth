@@ -150,7 +150,7 @@ function renderTracking(logs) {
 
 function renderHeroStats(logs) {
   const thisWeekLogs = logs.filter(log => isThisWeek(log.date));
-  const ketoStreak = countTrailing(logs, log => Number(log.netCarbsEstimate) <= 30);
+  const ketoStreak = countKetoStreak(logs);
   const workoutStreak = countTrailing(logs, log => log.workoutDone || log.surfDone);
   const surfCount = thisWeekLogs.filter(log => log.surfDone).length;
   const alcoholCount = thisWeekLogs.reduce((total, log) => total + (Number(log.alcoholDrinks) || 0), 0);
@@ -159,6 +159,17 @@ function renderHeroStats(logs) {
   document.getElementById('workout-streak').textContent = `${workoutStreak} day${workoutStreak === 1 ? '' : 's'}`;
   document.getElementById('surf-week').textContent = `${surfCount} / 2`;
   document.getElementById('alcohol-week').textContent = `${alcoholCount} / 2`;
+}
+
+function countKetoStreak(logs) {
+  const loggedStreak = countTrailing(logs, isKetoDay);
+  const latest = logs[logs.length - 1];
+
+  if (!latest || !isKetoDay(latest) || isToday(latest.date)) {
+    return loggedStreak;
+  }
+
+  return isYesterday(latest.date) ? loggedStreak + 1 : loggedStreak;
 }
 
 function renderLineChart(id, logs, key, color) {
@@ -307,6 +318,20 @@ function countTrailing(logs, predicate) {
   return count;
 }
 
+function isKetoDay(log) {
+  return Number(log.netCarbsEstimate) <= 30;
+}
+
+function isToday(date) {
+  return localDateKey(new Date()) === date;
+}
+
+function isYesterday(date) {
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  return localDateKey(yesterday) === date;
+}
+
 function isThisWeek(date) {
   const today = new Date();
   const day = today.getDay() || 7;
@@ -316,6 +341,17 @@ function isThisWeek(date) {
 
   const logDate = new Date(`${date}T12:00:00`);
   return logDate >= monday && logDate <= today;
+}
+
+function localDateKey(date) {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: PACIFIC_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const valueFor = type => parts.find(part => part.type === type).value;
+  return `${valueFor('year')}-${valueFor('month')}-${valueFor('day')}`;
 }
 
 function formatDateLabel(date) {

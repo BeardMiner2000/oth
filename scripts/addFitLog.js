@@ -69,7 +69,7 @@ function parseLog(input) {
     sleep: fields.sleep || '',
     energyMood,
     alcohol,
-    alcoholDrinks: numberFromText(alcohol) || 0,
+    alcoholDrinks: alcoholDrinksFromText(alcohol),
     estimatedMacros: fields['estimated macros'] || '',
     caloriesEstimate: averageRangeFromText(fields['estimated macros'], /calories:\s*~?([\d,]+)\s*[-–]\s*([\d,]+)/i),
     proteinEstimate: averageRangeFromText(fields['estimated macros'], /protein:\s*~?(\d+)\s*[-–]\s*(\d+)g/i),
@@ -152,6 +152,12 @@ function averageRangeFromText(value, pattern) {
   const low = Number(match[1].replace(',', ''));
   const high = Number(match[2].replace(',', ''));
   return Math.round((low + high) / 2);
+}
+
+function alcoholDrinksFromText(value) {
+  if (!value || /\bnone\b/i.test(value)) return 0;
+  if (/\b(previous night|night before|prior night)\b/i.test(value)) return 0;
+  return numberFromText(value) || 0;
 }
 
 function waterBottlesFromText(value) {
