@@ -480,7 +480,7 @@ function computeScore(data) {
   const windType  = data.wind ? (data.wind.type || '') : '';
 
   const isOffshore = windType === 'Offshore' || ['N','NNE','NE','ENE'].includes(windDir);
-  const isOnshore  = windType === 'Onshore'  || ['S','SSW','SW','W','WSW','NW','NNW'].includes(windDir);
+  const isOnshore  = windType === 'Onshore'  || ['S','SSW','SW','W','WSW','WNW','NW','NNW'].includes(windDir);
 
   if (!Number.isFinite(windSpeed)) {
     score -= 15;

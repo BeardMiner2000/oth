@@ -53,3 +53,7 @@ test('backup uses the swell component and preserves hourly resolution', () => {
   assert.equal(rows[0].swells[0].period, 12);
   assert.equal(rows[0].wind.speed, 0);
 });
+test('west-northwest wind is onshore at Bolinas', () => {
+  const result = context.computeScore({ spotKey: 'bolinas', wave: {min:2,max:3,period:10}, wind: {speed:7,direction:'WNW'} });
+  assert.ok(result.reasons.some(r => r.text.includes('ONSHORE')));
+});
