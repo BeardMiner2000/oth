@@ -27,6 +27,7 @@ async function getMarineForecast(lat, lon) {
     wind_speed_unit: 'kn',
     length_unit:     'imperial',
     timezone:        'America/Los_Angeles',
+    timeformat:      'unixtime',
     forecast_days:   7
   });
 
@@ -36,6 +37,7 @@ async function getMarineForecast(lat, lon) {
     hourly:          'wind_speed_10m,wind_direction_10m,wind_gusts_10m',
     wind_speed_unit: 'kn',
     timezone:        'America/Los_Angeles',
+    timeformat:      'unixtime',
     forecast_days:   7
   });
 
@@ -44,7 +46,7 @@ async function getMarineForecast(lat, lon) {
     axios.get(`${WEATHER_BASE}?${windParams}`,  { headers: { 'User-Agent': 'JLWouldGo/1.0' }, timeout: 12000 })
   ]);
 
-  if (marineResult.status === 'rejected') return [];
+  if (marineResult.status === 'rejected') throw marineResult.reason;
 
   const h = marineResult.value.data.hourly;
   if (!h || !h.time) return [];
@@ -55,7 +57,7 @@ async function getMarineForecast(lat, lon) {
     const wh = windResult.value.data.hourly;
     if (wh && wh.time) {
       wh.time.forEach((t, i) => {
-        const ts = Math.floor(new Date(t).getTime() / 1000);
+        const ts = Number(t);
         windByTs[ts] = {
           windSpeedKts:    wh.wind_speed_10m   ? round1(wh.wind_speed_10m[i])   : null,
           windDirectionDeg: wh.wind_direction_10m ? wh.wind_direction_10m[i]    : null,
@@ -66,7 +68,7 @@ async function getMarineForecast(lat, lon) {
   }
 
   return h.time.map((t, i) => {
-    const ts = Math.floor(new Date(t).getTime() / 1000);
+    const ts = Number(t);
     const wind = windByTs[ts] || {};
     return {
       timestamp:         ts,
@@ -76,9 +78,9 @@ async function getMarineForecast(lat, lon) {
       swellHeightFt:     h.swell_wave_height ? round1(h.swell_wave_height[i]) : null,
       swellPeriod:       h.swell_wave_period ? round1(h.swell_wave_period[i]) : null,   // use swell period, not wave period
       swellDirection:    h.swell_wave_direction ? h.swell_wave_direction[i]   : null,
-      windSpeedKts:      wind.windSpeedKts    || null,
-      windDirectionDeg:  wind.windDirectionDeg || null,
-      windGustKts:       wind.windGustKts     || null
+      windSpeedKts:      wind.windSpeedKts    ?? null,
+      windDirectionDeg:  wind.windDirectionDeg ?? null,
+      windGustKts:       wind.windGustKts     ?? null
     };
   });
 }

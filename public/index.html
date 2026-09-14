@@ -94,7 +94,7 @@
       </div>
       <div id="status-line">
         SYSTEM: ONLINE // LAST UPDATED: <span id="last-updated">--:-- PST</span>
-        &nbsp;//&nbsp; SOURCE: SURFLINE PRIMARY // STORMGLASS BACKUP
+        &nbsp;//&nbsp; SOURCE: <span id="active-source">CONNECTING</span>
         &nbsp;//&nbsp; <a href="#" onclick="refreshData(); return false;" class="refresh-link">[ REFRESH ]</a>
       </div>
     </div>
@@ -102,6 +102,8 @@
     <!-- ═══════════════════════════════════ FORECAST ═════════════════════════════════ -->
     <div id="forecast-grid">
       <div class="section-header">▶ 5-DAY GLIDE REPORT // <span id="forecast-spot-name">--</span></div>
+      <p class="focus-source">Best slots compare 7AM–6PM Pacific using surf size, period, wind and tide. Today excludes past slots. Model surf heights are rough estimates for Bolinas.</p>
+      <p class="focus-source">Push compares offshore swell height² × period against 3 FT @ 10 S (1×). It is a relative index, not measured energy or breaking surf height. <a href="https://open-meteo.com/">Open-Meteo</a> supplies backup marine and wind forecasts.</p>
       <div id="forecast-cards-wrap">
         <div class="terminal-msg">AWAITING DATA FEED...</div>
       </div>

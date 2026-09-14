@@ -194,10 +194,15 @@ function render() {
   } else if (useStormglass) {
     tableData = stormglassNorm;
     verdictSource = 'stormglass';
+  } else if (state.forecastData.openMeteo?.length) {
+    tableData = normalizeOpenMeteoForTable(state.forecastData.openMeteo);
+    verdictSource = 'openMeteo';
   } else {
     tableData = [];
     verdictSource = 'none';
   }
+
+  tableData = tableData.map(entry => ({ ...entry, tide: entry.tide || closestByTimestamp(state.forecastData.tides, entry.timestamp) }));
 
   // Verdict uses the selected day's slice
   const dayData       = getDaySlice(tableData, state.currentDay);
@@ -207,11 +212,8 @@ function render() {
   );
   const verdict = calculateVerdict(verdictInput);
 
-  // Best time to surf today (only shown when viewing today)
-  const todayIntervals = getDaySlice(tableData, 0);
-  const bestTime = state.currentDay === 0
-    ? findBestSurfTimeToday(todayIntervals, state.forecastData.tides)
-    : null;
+  // Rank the selected day using the same inputs as the daily cards.
+  const bestTime = findBestSurfTimeToday(dayData, state.forecastData.tides);
 
   renderVerdictPanel(verdict, bestTime);
   renderFridayFocus(tableData, state.forecastData.tides, verdictSource, { waveSource, tideSource });
@@ -219,6 +221,9 @@ function render() {
 
   // 5-day summary
   renderForecastTable(tableData, state.forecastData.tides, state.forecastData.conditions);
+
+  const sourceEl = document.getElementById('active-source');
+  if (sourceEl) sourceEl.textContent = `${waveSource.toUpperCase()} // TIDES: ${tideSource.toUpperCase()}`;
 
   // Update timestamp
   updateTimestamp();
@@ -229,22 +234,21 @@ function render() {
 function normalizeStormglassForTable(intervals) {
   const todayKey = getPacificDayKey(shiftPacificDate(0));
 
-  // Stormglass is hourly; keep Pacific 3-hour slots (12/3/6/9...) rather than every third raw row.
+  // Preserve hourly resolution when comparing sessions.
   return intervals
     .filter(e => {
       if (getPacificDayKeyFromTimestamp(e.timestamp) < todayKey) return false;
-      return getPacificMinute(e.timestamp) === 0 && getPacificHour(e.timestamp) % 3 === 0;
+      return Number.isFinite(e.waveHeightFt);
     })
     .map(e => ({
       timestamp: e.timestamp,
       surf: isBolinasSpot()
         ? buildSurfRange(e.waveHeightFt, 0.25, 0.35)
         : buildSurfRange(e.waveHeightFt, 0.9, 1.0),
-      swells: e.waveHeightFt ? [{
-        height:    e.waveHeightFt,
-        // Stormglass wavePeriod (~10s) is better than Open-Meteo (~9s), closer to Surfline
-        period:    e.wavePeriod || 0,
-        direction: e.waveDirection || 0,
+      swells: e.swellHeightFt != null ? [{
+        height:    e.swellHeightFt,
+        period:    e.swellPeriod ?? 0,
+        direction: e.swellDirection ?? null,
         optimalScore: 0
       }] : [],
       wind: e.windSpeedKts != null ? {
@@ -259,13 +263,9 @@ function normalizeStormglassForTable(intervals) {
 
 // ─── Open-Meteo → Surfline-shape normalizer (fallback for forecast table) ─────
 function normalizeOpenMeteoForTable(intervals) {
-  // Only show data from today onwards
-  const now = new Date();
-  const todayMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
-  const todayMidnightTs = Math.floor(todayMidnight.getTime() / 1000);
-  // Open-Meteo is hourly; sample every 3 hours
+  // Keep hourly Pacific forecast slots, including calm wind and zero wave height.
   return intervals
-    .filter((e, i) => i % 3 === 0 && e.timestamp >= todayMidnightTs)
+    .filter(e => getPacificDayKeyFromTimestamp(e.timestamp) >= getPacificDayKey(shiftPacificDate(0)) && Number.isFinite(e.waveHeightFt))
     .map(e => ({
       timestamp: e.timestamp,
       surf: isBolinasSpot()
@@ -273,9 +273,8 @@ function normalizeOpenMeteoForTable(intervals) {
         : buildSurfRange(e.waveHeightFt, 0.9, 1.0),
       swells: e.swellHeightFt ? [{
         height:    e.swellHeightFt,
-        // Use wave_period as better estimate than swell_wave_period for Bolinas
-        // (Open-Meteo swell_wave_period is underestimated; wave_period ~9s is closer to actual)
-        period:    e.wavePeriod || 0,
+        // Keep swell height and swell period from the same component.
+        period:    e.swellPeriod ?? 0,
         direction: e.swellDirection || 0,
         optimalScore: 0
       }] : [],
@@ -339,21 +338,22 @@ function getDaySlice(intervals, dayOffset) {
 /**
  * Pick best single representative interval from a day slice.
  * Scores each interval with computeScore() and returns the highest-scoring one.
- * Restricted to daylight hours (6am–8pm) unless no daylight slot exists.
+ * Compare upcoming slots from 7am–6pm Pacific; never use nighttime fallback.
  */
 function getBestInterval(daySlice) {
   if (!daySlice || daySlice.length === 0) return null;
 
   const daylight = daySlice.filter(e => {
     const h = getPacificHour(e.timestamp);
-    return h >= 6 && h <= 20;
+    return h >= 7 && h <= 18;
   });
-  const candidates = daylight.length > 0 ? daylight : daySlice;
+  const candidates = daylight.filter(e => e.timestamp >= Date.now() / 1000 && Number.isFinite(e.surf?.min) && Number.isFinite(e.surf?.max));
+  if (!candidates.length) return null;
 
   let best = candidates[0];
-  let bestScore = -1;
+  let bestScore = -Infinity;
   candidates.forEach(entry => {
-    const dominantSwell = (entry.swells || []).find(s => s.height > 0);
+    const swell = dominantSwell(entry);
     const swellDir = entry.swells && entry.swells.length > 0
       ? degToCompass(entry.swells.reduce((a, b) => a.height >= b.height ? a : b).direction)
       : '';
@@ -362,18 +362,18 @@ function getBestInterval(daySlice) {
       wave: {
         min:      entry.surf ? entry.surf.min : 0,
         max:      entry.surf ? entry.surf.max : 0,
-        period:   dominantSwell ? dominantSwell.period : 0,
+        period:   swell ? swell.period : 0,
         swellDir
       },
       wind: {
-        speed:     entry.wind ? entry.wind.speed         : 0,
+        speed:     entry.wind ? entry.wind.speed         : null,
         direction: entry.wind ? degToCompass(entry.wind.direction) : '---',
         gust:      entry.wind ? entry.wind.gust          : 0,
         type:      entry.wind ? entry.wind.directionType : ''
       },
       tide: entry.tide || null
     };
-    const { score } = computeScore(input);
+    const { rankScore: score } = computeScore(input);
     if (score > bestScore) { bestScore = score; best = entry; }
   });
   return best;
@@ -400,17 +400,17 @@ function buildVerdictInput(daySlice, sourceHint = 'surfline') {
     ? degToCompass(interval.wind.direction)
     : '---';
 
-  const dominantSwell = (interval.swells || []).find(s => s.height > 0);
+  const swell = dominantSwell(interval);
   return {
     spotKey: state.currentSpot,
     wave: {
       min:    interval.surf ? interval.surf.min : 0,
       max:    interval.surf ? interval.surf.max : 0,
-      period: dominantSwell ? dominantSwell.period : 0,
+      period: swell ? swell.period : 0,
       swellDir
     },
     wind: {
-      speed:     interval.wind ? interval.wind.speed         : 0,
+      speed:     interval.wind ? interval.wind.speed         : null,
       direction: windDirName,
       gust:      interval.wind ? interval.wind.gust          : 0,
       type:      interval.wind ? interval.wind.directionType : ''
@@ -472,17 +472,20 @@ function computeScore(data) {
     reasons.push({ text: `${waveStr} CHECK DORAN INSTEAD`, cls: 'reason-bad' });
   }
 
-  if (flat) return { score: Math.max(0, Math.min(100, Math.round(score))), reasons, flat, scary };
+  if (flat) return { rankScore: score, score: Math.max(0, Math.min(100, Math.round(score))), reasons, flat, scary };
 
   // ── Glassiness / Wind (huge factor for JL — clean > size) ───────────────
-  const windSpeed = data.wind ? (data.wind.speed || 0) : 0;
+  const windSpeed = data.wind?.speed;
   const windDir   = data.wind ? (data.wind.direction || '') : '';
   const windType  = data.wind ? (data.wind.type || '') : '';
 
   const isOffshore = windType === 'Offshore' || ['N','NNE','NE','ENE'].includes(windDir);
   const isOnshore  = windType === 'Onshore'  || ['S','SSW','SW','W','WSW','NW','NNW'].includes(windDir);
 
-  if (windSpeed < 3) {
+  if (!Number.isFinite(windSpeed)) {
+    score -= 15;
+    reasons.push({ text: 'WIND UNKNOWN', cls: 'reason-warn' });
+  } else if (windSpeed < 3) {
     // Glassy — JL's dream
     score += 25;
     reasons.push({ text: 'GLASSY 🏄', cls: 'reason-good' });
@@ -510,7 +513,7 @@ function computeScore(data) {
   const period = data.wave ? (data.wave.period || 0) : 0;
   if (period >= 14) {
     score += 15;
-    reasons.push({ text: `${period}S SLOW ROLLERS`, cls: 'reason-good' });
+    reasons.push({ text: `${period}S LONG PERIOD / MORE PUSH`, cls: 'reason-good' });
   } else if (period >= 11) {
     score += 8;
     reasons.push({ text: `${period}S GOOD PERIOD`, cls: 'reason-good' });
@@ -550,10 +553,13 @@ function computeScore(data) {
     }
   }
 
-  return { score: Math.max(0, Math.min(100, Math.round(score))), reasons, flat, scary };
+  if (waveMid < 1.5) score = Math.min(score, 55);
+
+  return { rankScore: score - (Number.isFinite(windSpeed) ? windSpeed * 0.25 : 0), score: Math.max(0, Math.min(100, Math.round(score))), reasons, flat, scary };
 }
 
 function calculateVerdict(data) {
+  if (!data) return { verdict: '[ NO DATA ]', score: 0, cls: 'chunky', reasons: [{ text: 'NO UPCOMING DAYTIME FORECAST', cls: 'reason-warn' }], source: null, parking: { text: 'CONDITIONS UNKNOWN', cls: 'reason-neutral' } };
   const { score, reasons, flat, scary } = computeScore(data);
 
   let verdict, cls;
@@ -593,50 +599,13 @@ function calculateVerdict(data) {
  * Criteria: under 4ft, glassy/offshore wind, some push, lower tide.
  */
 function findBestSurfTimeToday(todayIntervals, tides) {
-  const nowTs = Math.floor(Date.now() / 1000);
-  let best = null;
-  let bestScore = -1;
-
-  todayIntervals.forEach(entry => {
-    if (entry.timestamp < nowTs) return; // skip past slots
-    const h = getPacificHour(entry.timestamp);
-    if (h < 6 || h > 20) return; // daylight only
-
-    // Attach closest tide if not already present
-    const tideEntry = entry.tide || (tides && tides.length
-      ? tides.reduce((b, c) => Math.abs(c.timestamp - entry.timestamp) < Math.abs(b.timestamp - entry.timestamp) ? c : b)
-      : null);
-
-    const swellDir = entry.swells && entry.swells.length > 0
-      ? degToCompass(entry.swells.reduce((a, b) => a.height >= b.height ? a : b).direction)
-      : null;
-
-    const dominantSwell = (entry.swells || []).find(s => s.height > 0);
-    const verdictInput = {
-      spotKey: state.currentSpot,
-      wave: {
-        min:      entry.surf ? entry.surf.min : 0,
-        max:      entry.surf ? entry.surf.max : 0,
-        period:   dominantSwell ? dominantSwell.period : 0,
-        swellDir: swellDir || ''
-      },
-      wind: {
-        speed:     entry.wind ? entry.wind.speed         : 0,
-        direction: entry.wind ? degToCompass(entry.wind.direction) : '---',
-        gust:      entry.wind ? entry.wind.gust          : 0,
-        type:      entry.wind ? entry.wind.directionType : ''
-      },
-      tide: tideEntry || null
-    };
-
-    const { score } = computeScore(verdictInput);
-    if (score > bestScore) {
-      bestScore = score;
-      best = { entry, score, tideEntry, verdictInput };
-    }
-  });
-
-  return best;
+  const entries = (todayIntervals || []).map(entry => ({
+    ...entry, tide: entry.tide || closestByTimestamp(tides, entry.timestamp)
+  }));
+  const entry = getBestInterval(entries);
+  if (!entry) return null;
+  const verdictInput = buildVerdictInput([entry]);
+  return { entry, score: computeScore(verdictInput).score, tideEntry: entry.tide, verdictInput };
 }
 
 // ─── Render: Verdict Panel ────────────────────────────────────────────────────
@@ -653,7 +622,7 @@ function renderVerdictPanel(verdict, bestTime) {
 
   // Update class
   box.className = isSurflineSource(waveSource) ? verdict.cls : 'chunky';
-  textEl.textContent = isSurflineSource(waveSource) ? verdict.verdict : '[ BACKUP ]';
+  textEl.textContent = !verdict.source ? '[ NO DATA ]' : isSurflineSource(waveSource) ? verdict.verdict : '[ MODEL ESTIMATE ]';
 
   // Label — condition descriptor + JL verdict question
   const labels = {
@@ -679,7 +648,7 @@ function renderVerdictPanel(verdict, bestTime) {
 
   // Reasons + data source tag
   if (reasonEl) {
-    const srcMap = { surfline: 'SURFLINE', surfline_relay: 'SURFLINE RELAY', stormglass: 'STORMGLASS BACKUP' };
+    const srcMap = { surfline: 'SURFLINE', surfline_relay: 'SURFLINE RELAY', stormglass: 'STORMGLASS BACKUP', openMeteo: 'OPEN-METEO MODEL' };
     const srcTag = verdict.source ? `<span class="reason-item reason-neutral">[ SRC: ${srcMap[verdict.source] || verdict.source} ]</span>` : '';
     const backupTag = !isSurflineSource(waveSource)
       ? `<span class="reason-item reason-bad">[ SURFLINE FETCH FAILED ON SERVER - BACKUP ONLY ]</span>`
@@ -707,13 +676,13 @@ function renderVerdictPanel(verdict, bestTime) {
       const windSpeed = bestTime.verdictInput.wind.speed;
       const windDir   = bestTime.verdictInput.wind.direction;
       const windType  = bestTime.verdictInput.wind.type;
-      const isGlassy  = windSpeed < 3;
+      const isGlassy  = Number.isFinite(windSpeed) && windSpeed < 3;
       const isOffshore = windType === 'Offshore' || ['N','NNE','NE','ENE'].includes(windDir);
-      const windDesc  = isGlassy ? 'GLASSY' : isOffshore ? `${windDir} OFFSHORE` : `${windDir} ${Math.round(windSpeed)}KT`;
+      const windDesc  = !Number.isFinite(windSpeed) ? 'WIND UNKNOWN' : isGlassy ? 'GLASSY' : isOffshore ? `${windDir} OFFSHORE` : `${windDir} ${Math.round(windSpeed)}KT`;
       const tideH     = bestTime.tideEntry ? `${bestTime.tideEntry.height.toFixed(1)}FT TIDE` : null;
       let desc = `${waveStr} // ${windDesc}`;
       if (tideH) desc += ` // ${tideH}`;
-      bestEl.innerHTML = `<span class="reason-item reason-good">[ BEST GLIDE WINDOW: ${timeLabel} — ${desc} ]</span>`;
+      bestEl.innerHTML = `<span class="reason-item reason-good">[ BEST FORECAST SLOT: ${timeLabel} — ${desc} ]</span>`;
     } else {
       bestEl.textContent = '';
     }
@@ -742,7 +711,7 @@ function renderFridayFocus(intervals, tides, source, sourceMeta = {}) {
     return;
   }
 
-  const dawnWindow = getSessionWindow(fridaySlice, 6, 9);
+  const dawnWindow = getSessionWindow(fridaySlice, 7, 9);
   const session = summarizeWindow(dawnWindow.length ? dawnWindow : fridaySlice, tides, source);
   const verdict = calculateVerdict(buildVerdictInput(dawnWindow.length ? dawnWindow : fridaySlice, source));
   const patchCall = buildPatchChannelCall(session);
@@ -751,19 +720,19 @@ function renderFridayFocus(intervals, tides, source, sourceMeta = {}) {
     ? `${session.minTide.toFixed(1)}-${session.maxTide.toFixed(1)} FT`
     : 'NO TIDE';
   const fridayKicker = isCurrentFriday ? 'THIS FRIDAY' : 'NEXT FRIDAY';
-  const waveSourceLabel = isSurflineSource(sourceMeta.waveSource) ? (sourceMeta.waveSource === 'surfline_relay' ? 'SURFLINE RELAY' : 'SURFLINE') : 'STORMGLASS BACKUP';
+  const waveSourceLabel = isSurflineSource(sourceMeta.waveSource) ? (sourceMeta.waveSource === 'surfline_relay' ? 'SURFLINE RELAY' : 'SURFLINE') : sourceMeta.waveSource === 'openMeteo' ? 'OPEN-METEO MODEL' : 'STORMGLASS BACKUP';
   const tideSourceLabel = isSurflineSource(sourceMeta.tideSource) ? (sourceMeta.tideSource === 'surfline_relay' ? 'SURFLINE RELAY' : 'SURFLINE') : sourceMeta.tideSource === 'noaa' ? 'NOAA BACKUP' : 'UNKNOWN';
   const sourceWarning = !isSurflineSource(sourceMeta.waveSource)
-    ? 'SURFLINE IS FAILING ON THE SERVER RIGHT NOW. THIS FRIDAY CARD IS A BACKUP READ, NOT JL TRUTH.'
+    ? 'USING A BACKUP MARINE MODEL. LOCAL SURF HEIGHT IS AN ESTIMATE.'
     : !isSurflineSource(sourceMeta.tideSource)
       ? 'TIDE CURVE IS CURRENTLY ON NOAA BACKUP BECAUSE SURFLINE TIDE FETCH FAILED.'
       : '';
   const focusHeadline = isSurflineSource(sourceMeta.waveSource)
     ? buildFridayHeadline(verdict, session)
-    : 'SURFLINE BLOCKED // BACKUP READ ONLY';
+    : 'FRIDAY // MODEL FORECAST';
   const focusCopy = isSurflineSource(sourceMeta.waveSource)
     ? buildFridayCopy(session, verdict)
-    : `Backup read is showing ${session.waveLabel.toLowerCase()}. Wait for Surfline before treating this like JL gospel.`;
+    : `Model estimate: ${session.waveLabel.toLowerCase()}. Local breaking-wave size is approximate; compare the swell, wind and tide before heading out.`;
   const stokeDisplay = isSurflineSource(sourceMeta.waveSource) ? `${verdict.score}%` : 'BACKUP ONLY';
   const focusClass = isSurflineSource(sourceMeta.waveSource) ? verdict.cls : 'chunky';
 
@@ -792,6 +761,7 @@ function renderFridayFocus(intervals, tides, source, sourceMeta = {}) {
           <div class="focus-stat-value">${escHtml(tideRange)}</div>
         </div>
       </div>
+      <div class="focus-source">PUSH: ${escHtml(session.pushLabel)}</div>
       <div class="focus-reasons">${session.reasons.map(r => `<span class="reason-pill ${r.cls}">${escHtml(r.text)}</span>`).join(' ')}</div>
     </div>
     <div class="call-card">
@@ -914,8 +884,8 @@ function summarizeWindow(entries, tides, source = 'surfline') {
   const waveMids = safeEntries.map(entry => ((entry.surf?.min || 0) + (entry.surf?.max || 0)) / 2);
   const avgWave = waveMids.length ? waveMids.reduce((a, b) => a + b, 0) / waveMids.length : 0;
   const avgPeriod = average(safeEntries.map(entry => dominantSwell(entry)?.period || 0));
-  const avgPower = average(safeEntries.map(entry => entry.power || 0));
-  const avgWind = average(safeEntries.map(entry => entry.wind?.speed || 0));
+  const avgPower = average(safeEntries.map(entry => entry.power ?? null));
+  const avgWind = average(safeEntries.map(entry => entry.wind?.speed ?? null));
   const tidePoints = safeEntries
     .map(entry => entry.tide || closestByTimestamp(tides, entry.timestamp))
     .filter(Boolean);
@@ -934,7 +904,7 @@ function summarizeWindow(entries, tides, source = 'surfline') {
   else if (avgWave > 5) reasons.push({ text: 'GETTING PRETTY CHUNKY', cls: 'reason-warn' });
   else reasons.push({ text: 'SMALL BUT MAYBE CRUISEY', cls: 'reason-neutral' });
 
-  if (avgWind < 4) reasons.push({ text: 'LIGHT WIND', cls: 'reason-good' });
+  if (avgWind !== null && avgWind < 4) reasons.push({ text: 'LIGHT WIND', cls: 'reason-good' });
   else if (avgWind > 10) reasons.push({ text: 'WINDY ENOUGH TO ANNOY OLD MEN', cls: 'reason-bad' });
 
   if (tideAverage !== null && tideAverage <= 1.2) reasons.push({ text: 'PATCH TIDE WINDOW', cls: 'reason-good' });
@@ -953,6 +923,7 @@ function summarizeWindow(entries, tides, source = 'surfline') {
     tideAverage,
     tideDelta,
     best,
+    pushLabel: describePush(best),
     verdict,
     reasons,
     waveLabel: safeEntries.length ? formatWaveHeightRange(safeEntries) : 'NO SURF DATA',
@@ -965,7 +936,7 @@ function buildPatchChannelCall(session) {
   const reasons = [];
   const avgTide = session.tideAverage;
   const tideDelta = session.tideDelta;
-  const avgPower = session.avgPower || 0;
+  const avgPower = session.avgPower;
   const avgWave = session.avgWave || 0;
   let headline;
   let cls;
@@ -990,11 +961,11 @@ function buildPatchChannelCall(session) {
     reasons.push('Mid tide can leave both options kinda in play.');
   }
 
-  if (avgPower < 40) reasons.push('There may not be enough push for a dreamy Patch slide.');
+  if (avgPower !== null && avgPower < 40) reasons.push('There may not be enough push for a dreamy Patch slide.');
   else if (avgPower > 140) reasons.push('There is enough water moving around to keep everybody honest.');
 
   if (tideDelta >= 1.8) reasons.push('Big tide swing means the Channel can feel like a lazy-river punishment session.');
-  if ((session.avgWind || 0) < 4) reasons.push('Light wind helps either call look more civilized.');
+  if (session.avgWind !== null && session.avgWind < 4) reasons.push('Light wind helps either call look more civilized.');
   if ((session.avgWave || 0) > 5) reasons.push('If it feels like a shortboard convention, nobody wins.');
 
   return { headline, cls, copy, reasons };
@@ -1031,7 +1002,7 @@ function buildForecastCard(date, offset, session, patchCall) {
       <div class="forecast-card-copy">${escHtml(buildCardCopy(session, verdict))}</div>
       <div class="forecast-card-grid">
         <div class="mini">
-          <div class="mini-label">DAWN</div>
+          <div class="mini-label">DAYTIME SURF</div>
           <div class="mini-value">${escHtml(session.waveLabel)}</div>
         </div>
         <div class="mini">
@@ -1039,7 +1010,7 @@ function buildForecastCard(date, offset, session, patchCall) {
           <div class="mini-value">${escHtml(shortPatchLabel(patchCall.headline))}</div>
         </div>
         <div class="mini">
-          <div class="mini-label">BEST SLOT</div>
+          <div class="mini-label">BEST FORECAST SLOT</div>
           <div class="mini-value">${escHtml(session.bestLabel)}</div>
         </div>
         <div class="mini">
@@ -1047,6 +1018,7 @@ function buildForecastCard(date, offset, session, patchCall) {
           <div class="mini-value">${escHtml(session.minTide !== null && session.maxTide !== null ? `${session.minTide.toFixed(1)}-${session.maxTide.toFixed(1)} FT` : 'N/A')}</div>
         </div>
       </div>
+      <div class="reason-line">PUSH: ${escHtml(session.pushLabel)}</div>
       ${session.reasons.slice(0, 2).map(r => `<div class="reason-line">${escHtml(r.text)}</div>`).join('')}
     </article>
   `;
@@ -1065,6 +1037,15 @@ function shortPatchLabel(headline) {
   if (headline.includes('PATCH')) return 'PATCH';
   if (headline.includes('CHANNEL')) return 'CHANNEL';
   return 'PEEK BOTH';
+}
+
+// Relative offshore swell index: H² × period, normalized to 3 ft at 10 s.
+// This is a comparison proxy, not measured energy or local breaking-wave height.
+function describePush(entry) {
+  const swell = dominantSwell(entry);
+  if (!swell || !Number.isFinite(swell.height) || !(swell.period > 0)) return 'UNKNOWN';
+  const index = swell.height ** 2 * swell.period / 90;
+  return `${swell.height.toFixed(1)} FT @ ${swell.period.toFixed(0)} S ${degToCompass(swell.direction)} · ${index.toFixed(1)}× RELATIVE SWELL PUSH`;
 }
 
 function dominantSwell(entry) {
@@ -1095,9 +1076,10 @@ function formatHourShort(timestamp) {
 
 function closestByTimestamp(entries, timestamp) {
   if (!entries || !entries.length) return null;
-  return entries.reduce((best, current) =>
+  const closest = entries.reduce((best, current) =>
     Math.abs(current.timestamp - timestamp) < Math.abs(best.timestamp - timestamp) ? current : best
   );
+  return Math.abs(closest.timestamp - timestamp) <= 5400 ? closest : null;
 }
 
 function average(values) {
@@ -1121,8 +1103,8 @@ function renderForecastTable(intervals, tides) {
     const daySlice = getDaySlice(intervals, offset);
     if (!daySlice.length) continue;
     const targetDate = getDateForOffset(offset);
-    const dawn = getSessionWindow(daySlice, 6, 9);
-    const session = summarizeWindow(dawn.length ? dawn : daySlice, tides, intervals[0]?.power !== undefined ? 'surfline' : 'stormglass');
+    const daytime = getSessionWindow(daySlice, 7, 18).filter(entry => entry.timestamp >= Date.now() / 1000);
+    const session = summarizeWindow(daytime, tides, state.forecastData?.sources?.waves || 'none');
     const patchCall = buildPatchChannelCall(session);
     cards.push(buildForecastCard(targetDate, offset, session, patchCall));
   }

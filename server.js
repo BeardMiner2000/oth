@@ -11,6 +11,7 @@ const NodeCache = require('node-cache');
 const surfline    = require('./scrapers/surfline');
 const noaa        = require('./scrapers/noaa');
 const stormglass  = require('./scrapers/stormglass');
+const openMeteo = require('./scrapers/openMeteo');
 
 const DEFAULT_CORS_ORIGINS = [
   'https://oth.surf',
@@ -103,7 +104,7 @@ function mergeWaveWind(waves, winds) {
       return Math.abs(curr.timestamp - w.timestamp) < Math.abs(best.timestamp - w.timestamp)
         ? curr : best;
     }, winds[0] || {});
-    return { ...w, wind: wind || null };
+    return { ...w, wind: Math.abs(wind.timestamp - w.timestamp) <= 5400 ? wind : null };
   });
 }
 
@@ -112,10 +113,11 @@ function mergeWaveWind(waves, winds) {
  */
 function closestTide(tides, timestamp) {
   if (!tides || tides.length === 0) return null;
-  return tides.reduce((best, curr) => {
+  const closest = tides.reduce((best, curr) => {
     return Math.abs(curr.timestamp - timestamp) < Math.abs(best.timestamp - timestamp)
       ? curr : best;
   });
+  return Math.abs(closest.timestamp - timestamp) <= 5400 ? closest : null;
 }
 
 function ensureSnapshotDir() {
@@ -151,7 +153,7 @@ function setStoredSurflineSnapshot(spotKey, snapshot) {
 
 function isFreshSnapshot(snapshot) {
   if (!snapshot) return false;
-  const freshnessAt = snapshot.receivedAt || snapshot.fetchedAt;
+  const freshnessAt = snapshot.fetchedAt;
   if (!freshnessAt) return false;
   const ageSec = (Date.now() - new Date(freshnessAt).getTime()) / 1000;
   return ageSec >= 0 && ageSec <= SURFLINE_SNAPSHOT_TTL_SEC;
@@ -214,7 +216,7 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
     }
 
     // Fetch Surfline + Stormglass backup + NOAA tide fallback in parallel; tolerate partial failures
-    const [waveResult, windResult, tideResult, condResult, stormglassResult, noaaTideResult] = await Promise.allSettled([
+    const [waveResult, windResult, tideResult, condResult, stormglassResult, noaaTideResult, openMeteoResult] = await Promise.allSettled([
       surfline.getWaveForecast(spotMeta.id),
       surfline.getWindForecast(spotMeta.id),
       surfline.getTideForecast(spotMeta.id),
@@ -224,7 +226,8 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
         : Promise.resolve([]),
       noaaTideStation
         ? noaa.getTidePredictions(noaaTideStation)
-        : Promise.resolve([])
+        : Promise.resolve([]),
+      openMeteo.getMarineForecast(spotMeta.lat, spotMeta.lon)
     ]);
 
     const liveWaves  = waveResult.status  === 'fulfilled' ? waveResult.value      : [];
@@ -235,12 +238,15 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
     const stormglassData = stormglassResult.status === 'fulfilled' ? stormglassResult.value : [];
     const snapshot = getStoredSurflineSnapshot(spotKey);
     const freshSnapshot = isFreshSnapshot(snapshot) ? snapshot : null;
-    const relaySnapshot = freshSnapshot || snapshot;
+    const relaySnapshot = freshSnapshot;
+    const cutoff = Date.now() / 1000 - 24 * 3600;
+    const currentRows = rows => rows.filter(row => row.timestamp >= cutoff);
+    const openMeteoData = openMeteoResult.status === 'fulfilled' ? currentRows(openMeteoResult.value) : [];
 
-    const waves = liveWaves.length > 0 ? liveWaves : (relaySnapshot?.wave || []);
-    const winds = liveWinds.length > 0 ? liveWinds : (relaySnapshot?.wind || []);
-    const sfTides = liveSfTides.length > 0 ? liveSfTides : (relaySnapshot?.tides || []);
-    const conds = liveConds.length > 0 ? liveConds : (relaySnapshot?.conditions || []);
+    const waves = currentRows(liveWaves).length > 0 ? currentRows(liveWaves) : currentRows(relaySnapshot?.wave || []);
+    const winds = currentRows(liveWinds).length > 0 ? currentRows(liveWinds) : currentRows(relaySnapshot?.wind || []);
+    const sfTides = currentRows(liveSfTides).length > 0 ? currentRows(liveSfTides) : currentRows(relaySnapshot?.tides || []);
+    const conds = currentRows(liveConds).length > 0 ? currentRows(liveConds) : currentRows(relaySnapshot?.conditions || []);
     const tides = sfTides.length > 0 ? sfTides : noaaTides;   // prefer Surfline tides
 
     // Merge wave + wind by timestamp
@@ -249,12 +255,12 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       tide: closestTide(tides, entry.timestamp)
     }));
 
-    const waveSource = liveWaves.length > 0
+    const waveSource = currentRows(liveWaves).length > 0
       ? 'surfline'
       : relaySnapshot && waves.length > 0
         ? 'surfline_relay'
-        : (stormglassData.length > 0 ? 'stormglass' : 'none');
-    const tideSource = liveSfTides.length > 0
+        : (stormglassData.length > 0 ? 'stormglass' : openMeteoData.length > 0 ? 'openMeteo' : 'none');
+    const tideSource = currentRows(liveSfTides).length > 0
       ? 'surfline'
       : relaySnapshot && sfTides.length > 0
         ? 'surfline_relay'
@@ -266,6 +272,7 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       tides,
       conditions:     conds,
       stormglass:     stormglassData,
+      openMeteo:      openMeteoData,
       sources: {
         waves: waveSource,
         tides: tideSource
@@ -278,6 +285,8 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
       fetchedAt:      new Date().toISOString(),
       cached:         false,
       errors: {
+        openMeteo: openMeteoResult.status === 'rejected' ? openMeteoResult.reason?.message : null,
+        noaa: noaaTideResult.status === 'rejected' ? noaaTideResult.reason?.message : null,
         wave:  waveResult.status  === 'rejected' ? waveResult.reason?.message  : null,
         wind:  windResult.status  === 'rejected' ? windResult.reason?.message  : null,
         tide:  tideResult.status  === 'rejected' ? tideResult.reason?.message  : null,

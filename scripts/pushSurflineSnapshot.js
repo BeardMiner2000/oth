@@ -83,17 +83,16 @@ async function main() {
   };
   saveRelayCache(relayCache);
 
-  const freshestFetchedAt = [wave, wind, tides, conditions]
+  const oldestFetchedAt = [wave, wind, tides, conditions]
     .map(entry => entry.fetchedAt)
-    .sort()
-    .reverse()[0];
+    .sort()[0];
 
   const payload = {
     wave: wave.data,
     wind: wind.data,
     tides: tides.data,
     conditions: conditions.data,
-    fetchedAt: freshestFetchedAt || new Date().toISOString()
+    fetchedAt: oldestFetchedAt || new Date().toISOString()
   };
 
   const res = await axios.post(
