@@ -10,13 +10,13 @@ test('expired relay rows cannot mask current backup data, even after fresh uploa
   const app = { use() {}, get(route, handler) { routes[route] = handler; }, post() {}, listen() {} };
   const express = Object.assign(() => app, { json: () => () => {}, static: () => () => {} });
   const now = Date.now() / 1000;
-  const snapshot = { fetchedAt: new Date().toISOString(), receivedAt: new Date().toISOString(), wave: [{timestamp: now - 7 * 86400}], wind: [], tides: [], conditions: [] };
+  const snapshot = { fetchedAt: new Date().toISOString(), receivedAt: new Date().toISOString(), wave: [{timestamp: now - 3600}], wind: [], tides: [], conditions: [] };
   const mockFs = { mkdirSync() {}, existsSync: () => true, readFileSync: () => JSON.stringify({ bolinas: snapshot }) };
   const surfline = { SPOTS: { bolinas: { id: 'test', lat: 37.9, lon: -122.7 } }, getWaveForecast: async () => { throw Error('403'); }, getWindForecast: async () => [], getTideForecast: async () => [], getConditions: async () => [] };
   const mocks = { dotenv: {config() {}}, express, cors: () => () => {}, fs: mockFs, path,
     'node-cache': class { get() {} set() {} }, './scrapers/surfline': surfline,
     './scrapers/noaa': { getTidePredictions: async () => [{ timestamp: now, height: 2 }] },
-    './scrapers/stormglass': {}, './scrapers/openMeteo': { getMarineForecast: async () => [{ timestamp: now, waveHeightFt: 4 }] } };
+    './scrapers/stormglass': {}, './scrapers/openMeteo': { getMarineForecast: async () => [{ timestamp: now + 3600, waveHeightFt: 4 }] } };
   const ctx = vm.createContext({ require: name => mocks[name], __dirname: path.resolve('.'), process: { env: {} }, console, setInterval() {}, module: {} });
   vm.runInContext(fs.readFileSync('server.js', 'utf8'), ctx);
   let payload;

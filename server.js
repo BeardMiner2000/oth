@@ -240,7 +240,8 @@ app.get('/api/forecast/:spotId', async (req, res, next) => {
     const freshSnapshot = isFreshSnapshot(snapshot) ? snapshot : null;
     const relaySnapshot = freshSnapshot;
     const cutoff = Date.now() / 1000 - 24 * 3600;
-    const currentRows = rows => rows.filter(row => row.timestamp >= cutoff);
+    const currentRows = rows => rows.some(row => row.timestamp >= Date.now() / 1000)
+      ? rows.filter(row => row.timestamp >= cutoff) : [];
     const openMeteoData = openMeteoResult.status === 'fulfilled' ? currentRows(openMeteoResult.value) : [];
 
     const waves = currentRows(liveWaves).length > 0 ? currentRows(liveWaves) : currentRows(relaySnapshot?.wave || []);
