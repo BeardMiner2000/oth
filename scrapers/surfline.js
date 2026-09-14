@@ -58,31 +58,55 @@ async function safeFetch(url) {
 }
 
 /**
- * Returns wave forecast for next 7 days in 3-hour intervals.
- * Shape: { data: { wave: [ { timestamp, surf: { min, max, humanRelation, rawMin, rawMax }, power, swells: [...] } ] } }
+ * Surfline now separates surf heights, swell partitions and energy.
+ * Join by timestamp, retaining the wave shape consumed by stored snapshots.
  */
 async function getWaveForecast(spotId) {
-  const url = `${BASE}/wave?spotId=${spotId}&days=7&intervalHours=3`;
-  const raw = await safeFetch(url);
-  const intervals = (raw.data && raw.data.wave) ? raw.data.wave : [];
-  return intervals.map(entry => ({
-    timestamp:  entry.timestamp,
-    surf: {
-      min:           entry.surf ? entry.surf.min           : 0,
-      max:           entry.surf ? entry.surf.max           : 0,
-      humanRelation: entry.surf ? entry.surf.humanRelation : '',
-      rawMin:        entry.surf ? entry.surf.rawMin        : 0,
-      rawMax:        entry.surf ? entry.surf.rawMax        : 0
-    },
-    power:  entry.power || 0,
-    swells: (entry.swells || []).map(s => ({
-      height:    s.height    || 0,
-      period:    s.period    || 0,
-      direction: s.direction || 0,
-      directionMin: s.directionMin || 0,
-      optimalScore: s.optimalScore || 0
-    }))
-  }));
+  const query = `spotId=${encodeURIComponent(spotId)}&days=7&intervalHours=3&cacheEnabled=true`;
+  const [surfResult, swellResult, energyResult] = await Promise.allSettled([
+    safeFetch(`${BASE}/surf?${query}&units%5BwaveHeight%5D=FT`),
+    safeFetch(`${BASE}/swells?${query}&units%5BswellHeight%5D=FT`),
+    safeFetch(`${BASE}/energy?${query}`)
+  ]);
+  if (surfResult.status === 'rejected') throw surfResult.reason;
+  const intervals = (surfResult.value.data?.surf || []).filter(entry =>
+    Number.isFinite(entry.timestamp) && Number.isFinite(entry.surf?.min) && Number.isFinite(entry.surf?.max)
+  );
+  if (!intervals.some(entry => entry.timestamp >= Date.now() / 1000)) {
+    throw new Error('Surfline returned no current surf forecast');
+  }
+
+  // Missing supplemental feeds must not discard a valid surf-height forecast.
+  const swellRows = swellResult.status === 'fulfilled' ? swellResult.value.data?.swells || [] : [];
+  const energyRows = energyResult.status === 'fulfilled' ? energyResult.value.data?.energy || [] : [];
+  const swellByTs = new Map(swellRows.map(entry => [entry.timestamp, entry]));
+  const energyByTs = new Map(energyRows.map(entry => [entry.timestamp, entry]));
+  return intervals.map(entry => {
+    const swell = swellByTs.get(entry.timestamp);
+    const energy = energyByTs.get(entry.timestamp);
+    return {
+      timestamp: entry.timestamp,
+      surf: {
+        min: entry.surf.min,
+        max: entry.surf.max,
+        humanRelation: entry.surf.humanRelation || '',
+        rawMin: entry.surf.raw?.min ?? entry.surf.min,
+        rawMax: entry.surf.raw?.max ?? entry.surf.max
+      },
+      power: swell?.power ?? null,
+      swells: (swell?.swells || []).map(s => ({
+        height: s.height ?? null,
+        period: s.period ?? null,
+        direction: s.direction ?? null,
+        directionMin: s.directionMin ?? null,
+        optimalScore: s.optimalScore ?? 0
+      })),
+      energy: energy ? {
+        nearshoreKj: Number.isFinite(energy.nearshore) ? energy.nearshore : null,
+        offshoreKj: Number.isFinite(energy.offshore) ? energy.offshore : null
+      } : null
+    };
+  });
 }
 
 /**

@@ -55,3 +55,24 @@ September 14 rollback assets on the Pi:
 - `oth-rollback:20260914`
 - `oth-relay-rollback:20260914`
 - `oth-relay-public-rollback:20260914`
+
+## Surfline feed refresh (September 14)
+
+Surfline's current client uses `/forecasts/surf`, `/forecasts/swells`, and
+`/forecasts/energy` instead of the old combined `/forecasts/wave` request.
+The Pi collector now joins those three responses by timestamp and retains the
+existing stored wave format. Wave and swell heights explicitly request feet;
+`energy.nearshoreKj` and `energy.offshoreKj` carry the energy forecast separately
+from legacy swell `power`. A missing energy/swell response does not discard
+valid surf heights. Empty, malformed or expired surf forecasts are rejected.
+
+Live Pi testing returned 56 surf slots with 56 matching energy records covering
+September 14–20. The dashboard prefers nearshore kJ and keeps the relative
+swell index only as a fallback. The test suite now includes 16 checks.
+
+Rollback assets for this second update:
+
+- `/opt/ai-home/backups/oth-wave-refresh-20260914/source-before-refresh.tar.gz`
+- `oth-rollback:pre-wave-refresh-20260914`
+- `oth-relay-rollback:pre-wave-refresh-20260914`
+- `oth-relay-public-rollback:pre-wave-refresh-20260914`

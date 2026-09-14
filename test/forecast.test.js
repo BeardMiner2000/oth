@@ -57,3 +57,12 @@ test('west-northwest wind is onshore at Bolinas', () => {
   const result = context.computeScore({ spotKey: 'bolinas', wave: {min:2,max:3,period:10}, wind: {speed:7,direction:'WNW'} });
   assert.ok(result.reasons.some(r => r.text.includes('ONSHORE')));
 });
+test('push prefers nearshore kJ over the relative proxy and retains zero energy', () => {
+  const e = slot('09'); e.energy = {nearshoreKj:36.4};
+  assert.match(context.describePush(e), /36 KJ NEARSHORE/);
+  assert.doesNotMatch(context.describePush(e), /RELATIVE/);
+  e.energy.nearshoreKj = 0;
+  assert.match(context.describePush(e), /0 KJ NEARSHORE/);
+  e.energy = null;
+  assert.match(context.describePush(e), /RELATIVE/);
+});

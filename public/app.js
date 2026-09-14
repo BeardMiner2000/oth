@@ -190,7 +190,7 @@ function render() {
   let tableData, verdictSource;
   if (useSurfline) {
     tableData = surflineData;
-    verdictSource = 'surfline';
+    verdictSource = waveSource;
   } else if (useStormglass) {
     tableData = stormglassNorm;
     verdictSource = 'stormglass';
@@ -1043,6 +1043,12 @@ function shortPatchLabel(headline) {
 // This is a comparison proxy, not measured energy or local breaking-wave height.
 function describePush(entry) {
   const swell = dominantSwell(entry);
+  const energy = entry?.energy?.nearshoreKj;
+  if (Number.isFinite(energy)) {
+    const swellLabel = swell && Number.isFinite(swell.height) && swell.period > 0
+      ? ` · ${swell.height.toFixed(1)} FT @ ${swell.period.toFixed(0)} S ${degToCompass(swell.direction)}` : '';
+    return `${energy.toFixed(0)} KJ NEARSHORE${swellLabel}`;
+  }
   if (!swell || !Number.isFinite(swell.height) || !(swell.period > 0)) return 'UNKNOWN';
   const index = swell.height ** 2 * swell.period / 90;
   return `${swell.height.toFixed(1)} FT @ ${swell.period.toFixed(0)} S ${degToCompass(swell.direction)} · ${index.toFixed(1)}× RELATIVE SWELL PUSH`;
