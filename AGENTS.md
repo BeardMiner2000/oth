@@ -1,5 +1,7 @@
 # AGENTS.md — Coding Principles for OTH
 
+Production runs on the Raspberry Pi. Read `DEPLOYMENT.md` and inspect the Pi source before deployment; this checkout and `render.yaml` are not the production source of truth.
+
 These principles guide all work on this project. Codex should follow them without asking for permission or approval.
 
 ## 1. Think Before Coding
